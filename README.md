@@ -1,3 +1,3 @@
 # DM's PowerShell Collection
 
-Collection of useful PowerShell scripts for systems and network admins
+Collection of useful PowerShell scripts for system/network admins.
