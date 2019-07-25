@@ -1,11 +1,11 @@
-﻿# PowerShell GUI to launch AdminTools running with Domain Admin credentials version 1.0 - Copyright DM Tech 2019 for NSW LRS
+﻿# PowerShell GUI to launch AdminTools running with Domain Admin credentials version 1.0 - Copyright DM Tech 2019
 # 
 # This script works by looking for shortcuts (.lnk files) in the current directory and generating a list of buttons on a form for one-click access
 # The idea being that you copy regularly used links of Administrative Tools to a directory along side this script
 # This script is then run with your Domain Admin account credentials, which in turn launches the tools as a Domain Admin
 #
 # Assuming the path to this script is "D:\AdminTools\PSAdminTools.ps1" you can create a shortcut like this:
-# C:\Windows\System32\runas.exe /user:TRS\Admin.DMaguire /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\AdminTools\PSAdminTools.ps1"
+# C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\AdminTools\PSAdminTools.ps1"
 
 Function Hide-ConsoleWindow {
 
