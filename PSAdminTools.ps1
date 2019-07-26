@@ -1,5 +1,5 @@
 ﻿# PowerShell GUI form to launch Remote Server Admin Tools (RSAT) running with Domain Admin credentials 
- # Version 1.0 - Copyright DM Tech 2019
+# Version 1.0 - Copyright DM Tech 2019
 # 
 # This script was designed to enable a one-click launching of tools to manage servers from a workstation logged in with a standard user account
 # It works by looking for shortcuts (.lnk files) in the current directory and generating a list of buttons on a form
