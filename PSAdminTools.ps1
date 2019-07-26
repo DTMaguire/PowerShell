@@ -1,11 +1,14 @@
-﻿# PowerShell GUI to launch AdminTools running with Domain Admin credentials version 1.0 - Copyright DM Tech 2019
+﻿# PowerShell GUI form to launch Remote Server Admin Tools (RSAT) running with Domain Admin credentials 
+ # Version 1.0 - Copyright DM Tech 2019
 # 
-# This script works by looking for shortcuts (.lnk files) in the current directory and generating a list of buttons on a form for one-click access
-# The idea being that you copy regularly used links of Administrative Tools to a directory along side this script
-# This script is then run with your Domain Admin account credentials, which in turn launches the tools as a Domain Admin
+# This script was designed to enable a one-click launching of tools to manage servers from a workstation logged in with a standard user account
+# It works by looking for shortcuts (.lnk files) in the current directory and generating a list of buttons on a form
 #
-# Assuming the path to this script is "D:\AdminTools\PSAdminTools.ps1" you can create a shortcut like this:
-# C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\AdminTools\PSAdminTools.ps1"
+# Usage: Copy regularly used links of Administrative Tools to a specified directory along side this script, such as 'D:\AdminTools'
+# Assuming the path to this script is 'D:\AdminTools\PSAdminTools.ps1' create a shortcut somewhere handy with the target:
+#   C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\AdminTools\PSAdminTools.ps1"
+# Open the shortcut (not the ps1 file), enter your password once and you'll be set
+# Shortcuts can be added and removed from the directory as desired, although the recommended maximum is 15 for a 1080p display
 
 Function Hide-ConsoleWindow {
 
