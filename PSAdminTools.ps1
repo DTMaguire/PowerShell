@@ -9,6 +9,8 @@
 #   C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\AdminTools\PSAdminTools.ps1"
 # Open the shortcut (not the ps1 file), enter your password once and you'll be set
 # Shortcuts can be added and removed from the directory as desired, although the recommended maximum is 15 for a 1080p display
+# *** On further testing, it looks like method doesn't work if the files are located inside the user profile due to some Windows security feature
+# The parameter '-File' isn't able to be found in this case, so simple fix is to move it to another folder in C:\ or another drive as above!
 
 Function Hide-ConsoleWindow {
 
