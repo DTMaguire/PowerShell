@@ -9,31 +9,41 @@
 
 # Check the Active Directory module is loaded
 If (! (Get-Module ActiveDirectory)) {
+
     Import-Module ActiveDirectory
 }
 
 # Filter groups with names starting with "ROLE" - change as required
 $Filter = "ROLE"
+
 $Groups = Get-ADGroup -Filter 'Name -like "$Filter*"' -Properties CanonicalName
 
 ForEach ($Group in $Groups) {
 
     # Generate a sane file name for the current group
     $ExportName = $Group.SamAccountName
+    
     # Select some useful attributes to capture
     $GroupAttributes = $Group | Select Name,SamAccountName,CanonicalName,GroupCategory,GroupScope
+    
     # Collect a list of members of the current group
     $GroupMembers = Get-ADGroupMember -Identity $Group | Select Name
 
     # Check if group is empty and if so, write its name to a text file and jump to the next group
     If (! $GroupMembers) {
+    
         Write-Host -ForegroundColor Gray "Skipping creation of file for empty group `'$ExportName`'"
+        
         $ExportName | Out-File -Append "$Filter - Empty Groups.txt"
-        }
+    }
+    
     # Group does contain members, so append group name to CSV and then output the list of members to a seperate text file
     Else {
+    
         Write-Host -ForegroundColor Green "Writing group `'$ExportName`' to `'"$Filter" - All Groups.csv`' and members to `'$ExportName - Members.txt`'"
+        
         Export-Csv -InputObject $GroupAttributes -NoTypeInformation -Append -Path "$Filter - All Groups.csv"
+        
         $GroupMembers | Out-File "$ExportName - Members.txt"
     }
 } 
