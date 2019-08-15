@@ -4,17 +4,13 @@
 # This script prompts for an AD account name to generate a list of groups that the specified user belongs to
 # It then both writes a list of groups to the screen and a text file sorted by name
 
-# Check the Active Directory module is loaded
-If (! (Get-Module ActiveDirectory)) {
-
-    Import-Module ActiveDirectory
-}
+#Requires -Modules ActiveDirectory
 
 # Global variables 
 $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
 
-Write-Host -ForegroundColor 'Cyan' "`nPowerShell script to export a list of groups a specified user belongs to (excluding `'Domain Users`')"
+Write-Host -ForegroundColor 'Magenta' "`nPowerShell script to export a list of groups a specified user belongs to (excluding `'Domain Users`')"
 
 # Continue prompting for account names until 'q' is entered
 Do {
