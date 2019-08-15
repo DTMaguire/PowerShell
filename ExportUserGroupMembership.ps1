@@ -68,7 +68,6 @@ Do {
                 # Output to screen and write to file
                 #Tee-Object -InputObject $Groups -FilePath $FileName
                 # Works fine but doesn't include the 'Name' header which could be useful for future parsing of the text files
-
             }
         }
 
