@@ -1,12 +1,7 @@
-﻿# PowerShell script to export a list of account expiry and password attributes for a specified user
+﻿# PowerShell script to export a list of account expiry and password attributes for a specified user to CSV
 # Version 2.0 - Copyright DM Tech 2019
 
-# Check the Active Directory module is loaded
-
-If ( ! (Get-Module ActiveDirectory)) {
-
-    Import-Module ActiveDirectory
-}
+#Requires -Modules ActiveDirectory
 
 # Global variables
 $Quit = $False
@@ -42,7 +37,7 @@ Do {
 
         Catch {
 
-            Write-Host -ForegroundColor 'Magenta' "`nWell, that didn't work - `'$User`' was unable to be found..."
+            Write-Host -ForegroundColor 'Magenta' "`nUnable to find account name match for `'$User`'"
 
             Continue
         }
