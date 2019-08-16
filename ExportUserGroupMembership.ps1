@@ -6,23 +6,31 @@
 
 #Requires -Modules ActiveDirectory
 
+Write-Host -ForegroundColor 'Magenta' "`nPowerShell script to export a list of groups a specified user belongs to (excluding `'Domain Users`')"
+
 # Global variables 
 $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
+$OutputDir = "..\Test"
 
-Write-Host -ForegroundColor 'Magenta' "`nPowerShell script to export a list of groups a specified user belongs to (excluding `'Domain Users`')"
+If( !(Test-Path $OutputDir)) {
+
+    Write-Host -ForegroundColor 'Magenta' "`nPath to `'$OutputDir`' does not exist, creating it under:"
+
+    # Create output folder if it doesn't exist
+    New-Item -ItemType Directory -Force -Path $OutputDir
+}
 
 # Continue prompting for account names until 'q' is entered
 Do {
 
     # Get input for name lookup
-    $NameLookup = Read-Host -Prompt "`nEnter a user's first, last or SAM account name to export groups from, or 'q' to quit"
+    $Lookup = Read-Host -Prompt "`nEnter a user's first, last or SAM account name to export groups from, or 'q' to quit"
 
     # Check if 'q' has been entered
-    If ($NameLookup -eq "q") {
+    If ($Lookup -eq "q") {
 
         Write-Host "Quitting..."
-        
         $Quit = $True
     }
 
@@ -31,7 +39,7 @@ Do {
         Try {
 
             # Attempt to resolve the input to a user object in the directory
-            $Result = (Get-ADuser -Filter {Name -like $NameLookup -or GivenName -like $NameLookup -or SurName -like $Namelookup})
+            $Result = (Get-ADuser -Filter {SamAccountName -like $Lookup -or Name -like $Lookup -or GivenName -like $Lookup -or SurName -like $lookup})
             
             # Create a variable with the SAM for easy access
             $UserSam = $Result.SamAccountName
@@ -47,8 +55,9 @@ Do {
 
             Else {
             
-                # Generate a relevant filename
-                $FileName = "GroupMembership_$UserSam-$Timestamp.txt"
+                # Generate a relevant filename, -Path can be adjusted as required
+                $File = "GroupMembership_$UserSam-$Timestamp.txt"
+                $FileName = (Join-Path -Path "..\Output" -ChildPath $File)
 
                 # Generate a list of groups for a single matched user account
                 $Groups = (Get-ADUser -Identity $UserSam -Properties MemberOf | Select-Object -ExpandProperty MemberOf | Get-ADGroup | Sort-Object | Select-Object -Property Name)
@@ -70,8 +79,7 @@ Do {
         Catch {
 
             # If triggered, print an error and jump back up to the 'Do' loop
-            Write-Host -ForegroundColor 'Magenta' "`nUnable to find account name matching input: `'$NameLookup`'"
-            
+            Write-Host -ForegroundColor 'Magenta' "`nUnable to find account name matching input: `'$Lookup`'"
             Continue
         }
     }
