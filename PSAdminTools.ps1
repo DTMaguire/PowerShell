@@ -9,60 +9,64 @@
 #   C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\AdminTools\PSAdminTools.ps1"
 # Open the shortcut (not the ps1 file), enter your password once and you'll be set
 # Shortcuts can be added and removed from the directory as desired, although the recommended maximum is 15 for a 1080p display
-# *** On further testing, it looks like method doesn't work if the files are located inside the user profile due to some Windows security feature
-# The parameter '-File' isn't able to be found in this case, so simple fix is to move it to another folder in C:\ or another drive as above!
 
-Function Hide-ConsoleWindow {
+# *** On further testing, it looks like method doesn't work if the files are located inside the user profile due to some Windows security feature
+# The parameter '-File' isn't able to be found in this case, so simple fix is to move it to another folder outside of your profile or another drive as above!
+
+Function HideConsoleWindow {
 
     Add-Type -Name Window -Namespace Console -MemberDefinition '
         [DllImport("Kernel32.dll")]
         public static extern IntPtr GetConsoleWindow();
         [DllImport("user32.dll")]
         public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'
+
     $ConsolePtr = [Console.Window]::GetConsoleWindow()
+
     [Console.Window]::ShowWindow($ConsolePtr, 0)
 }
 
-Function Generate-Form {
+Function GenerateForm {
 
     # Hide background console window
-
-    Hide-ConsoleWindow
+    HideConsoleWindow
 
     Add-Type -AssemblyName System.Windows.Forms    
     Add-Type -AssemblyName System.Drawing
     
     # Generate Tools array
-    
-    $Tools = @(Get-ChildItem -Path $PSScriptRoot | where -Property Name -like *.lnk | select Name,FullName)
+    $Tools = @(Get-ChildItem -Path $PSScriptRoot | Where-Object -Property Name -like *.lnk | Select-Object Name,FullName)
 
     # Check OS Version to size form correctly
-    
     $WinVer = [version](Get-CimInstance Win32_OperatingSystem).version
 
     # Create form sizing variables - can be reduced for a more compact interface
-
     $ButtonHeight = 45
     $ButtonYSpacing = 50
     $TitleYPos = ($ButtonYSpacing / 4)
+
+    # Windows 7 or earlier
     If ($WinVer -lt [version]6.2) {
+
         $FormWidth = 240
         $ButtonWidth = ($FormWidth - 26)
         $FormHeight = ($ButtonHeight * 1.75) + ($ButtonYSpacing * $Tools.Count)
         $TitleXPos = ($FormWidth / 50)
         $TitleFont = 'Microsoft Sans Serif, 9'
-        }
+    }
+
     Else {
+
         $FormWidth = 258
-        $ButtonWidth = ($FormWidth - 58)
+        $ButtonWidth = ($FormWidth - 40)
         $FormHeight = ($ButtonHeight * 2.25) + ($ButtonYSpacing * $Tools.Count)
         $TitleXPos = ($FormWidth / 100)
         $TitleFont = 'Microsoft Sans Serif, 10'
-        }
+    }
+
     $ButtonXPos = ($FormWidth - $ButtonWidth) / 3 # Looks about right
 
     # Build form
-    
     $Form = New-Object System.Windows.Forms.Form
     $Form.Text = "PSAdminTools"
     $Form.Size = New-Object System.Drawing.Size($FormWidth,$FormHeight)
@@ -72,7 +76,6 @@ Function Generate-Form {
     $Form.MaximizeBox = $False
 
     # Add title
-    
     $Title = New-Object system.Windows.Forms.Label
     $Title.Text = "DM's PowerShell AdminTools Launcher"
     $Title.AutoSize = $True
@@ -80,9 +83,9 @@ Function Generate-Form {
     $Title.Location = New-Object System.Drawing.Point($TitleXPos,$TitleYPos)
     $Form.Controls.Add($Title)
 
-    # Dynamically add Buttons  
-    
+    # Dynamically add Buttons
     ForEach ($Tool in $Tools) {
+
             $ButtonYPos = $ButtonHeight + ($ButtonYSpacing * $Tools.IndexOf($Tool))
             $Button = New-Object System.Windows.Forms.Button
             $Button.Location = New-Object System.Drawing.Size($ButtonXPos,$ButtonYPos)
@@ -94,8 +97,7 @@ Function Generate-Form {
      }
 
     # Show the Form 
-
     $Form.ShowDialog()| Out-Null 
 }
 
-Generate-Form 
+GenerateForm
