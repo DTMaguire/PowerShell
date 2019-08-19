@@ -3,7 +3,7 @@
 
 #Requires -Modules ActiveDirectory
 
-Write-Host -ForegroundColor 'Magenta' "`nPowerShell script to gather account expiry and password attributes for a specified user and export them to CSV"
+Write-Host -ForegroundColor 'Cyan' "`nPowerShell script to gather account expiry and password attributes for a specified user and export them to CSV"
 
 # Global variables
 $Quit = $False
@@ -34,7 +34,7 @@ Do {
         
             #Format a list of relevant properties
             $Properties = (Get-ADUser -Identity $User -Properties * -ErrorAction Inquire | Select-Object `
-            -Property Name,AccountExpirationDate,AccountLockoutTime,BadLogonCount,Enabled,LastBadPasswordAttempt,`
+            -Property Name,CanonicalName,UserPrincipalName,AccountExpirationDate,AccountLockoutTime,BadLogonCount,Enabled,LastBadPasswordAttempt,`
             LastLogonDate,LockedOut,lockoutTime,PasswordExpired,PasswordLastSet,PasswordNeverExpires)
 
             Write-Output ($Properties | Format-List)
