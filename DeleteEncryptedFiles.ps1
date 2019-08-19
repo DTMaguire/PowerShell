@@ -1,4 +1,4 @@
-## CryptoLocker File Removal Script - Version 2.0 by Daniel Maguire
+## CryptoLocker File Removal Script - Version 2.0 by DM
 ##
 ## Re-written in response to muppet(s) CryptoLocking their network drives and scattering .encrypted files all over the place
 ## See: https://en.wikipedia.org/wiki/CryptoLocker
