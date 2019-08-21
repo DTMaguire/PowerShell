@@ -24,7 +24,7 @@ Do {
 
     If ($User -eq "q") {
 
-        Write-Host "Quitting..."
+        Write-Host -ForegroundColor 'Magenta' "`nQuitting...`n"
         $Quit = $True
     }
 
@@ -42,7 +42,7 @@ Do {
             $File = "UserExpiry_$Timestamp.csv"
             $FileName = (Join-Path -Path $OutputDir -ChildPath $File)
 
-            Write-Host -ForegroundColor 'Green' "Adding to $FileName`n"
+            Write-Host -ForegroundColor 'Green' "Adding to $FileName"
 
             # Export and append the properties to CSV
             Export-Csv -NoTypeInformation -Append -Path $FileName -InputObject $Properties
