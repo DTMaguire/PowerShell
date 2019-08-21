@@ -12,6 +12,6 @@ Collection of useful PowerShell scripts for system/network admins.
 
 **PSAdminTools.ps1** - PowerShell GUI form to launch Remote Server Admin Tools (RSAT) running with Domain Admin credentials.
 
-**UpdateADProxyAddresses.ps1** - Script to update the proxyAddresses attribute in AD.
+**UpdateADProxyAddresses.ps1** - Script to perform a bulk update the proxyAddresses attribute in AD.
 
 **UserExpCheck.ps1** - Script to export a list of account expiry and password attributes for a specified user to CSV.
