@@ -34,8 +34,8 @@ Do {
         
             #Format a list of relevant properties
             $Properties = (Get-ADUser -Identity $User -Properties * -ErrorAction Inquire | Select-Object `
-            -Property Name,CanonicalName,UserPrincipalName,AccountExpirationDate,AccountLockoutTime,BadLogonCount,Enabled,LastBadPasswordAttempt,`
-            LastLogonDate,LockedOut,lockoutTime,PasswordExpired,PasswordLastSet,PasswordNeverExpires)
+            -Property Name,CanonicalName,SamAccountName,UserPrincipalName,AccountExpirationDate,AccountLockoutTime,BadLogonCount,`
+            Enabled,LastBadPasswordAttempt,LastLogonDate,LockedOut,lockoutTime,PasswordExpired,PasswordLastSet,PasswordNeverExpires)
 
             Write-Output ($Properties | Format-List)
 

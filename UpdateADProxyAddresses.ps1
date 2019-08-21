@@ -12,7 +12,7 @@
 
 Import-Module ActiveDirectory
 
-$users = Import-Csv -Path D:\itsupport\AD_Active_SANs.csv
+$users = Import-Csv -Path D:\Scripts\Output\AD_Active_SANs.csv
 $domain = "@domaingoeshere.com.au"
 
 Foreach ($u in $users) {
