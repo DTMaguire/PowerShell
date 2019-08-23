@@ -11,7 +11,7 @@ Write-Host -ForegroundColor 'Magenta' "`nPowerShell script to export a list of g
 # Global variables 
 $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
-$OutputDir = "..\Test"
+$OutputDir = "..\Output"
 
 If( !(Test-Path $OutputDir)) {
 
