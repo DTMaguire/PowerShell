@@ -19,7 +19,7 @@ function AccountLookup {
     param ( $InputStr )
 
     # Try to perform a look up with an LDAPFilter query, otherwise just return nothing instead of generating an error
-    If ($InputStr -match '(\*?)\w(\*?)') { # Regular expression checks for invalid input and allows for a maximum of 2 non-consecutive wildcards
+    If ($InputStr -match '\*?\w+-?\*?') { # Regular expression checks for invalid input and allows for a maximum of 2 non-consecutive wildcards
         
         $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=*$InputStr*)(GivenName=*$InputStr*)(SN=*$InputStr*))" | Select-Object GivenName, SurName, SamAccountName)
     } Else {
