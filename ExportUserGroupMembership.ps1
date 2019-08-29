@@ -3,6 +3,8 @@
 #
 # This script prompts for an AD account name to generate a list of groups that the specified user belongs to
 # It then both writes a list of groups sorted by name to the screen and a CSV file
+######## Current Issues!
+#   If two accounts exist where the input string exactly matches different attributes of both, neither will be able to be selected
 
 #Requires -Modules ActiveDirectory
 
@@ -16,8 +18,14 @@ $OutputDir = "..\Output"
 function AccountLookup {
     param ( $InputStr )
 
-    # Perform a look up with an LDAPFilter query using the input string and wildcards
-    $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=*$InputStr*)(GivenName=*$InputStr*)(SurName=*$InputStr*))" | Select-Object GivenName, SurName, SamAccountName)
+    # Try to perform a look up with an LDAPFilter query, otherwise just return nothing instead of generating an error
+    If ($InputStr -match '(\*?)\w(\*?)') { # Regular expression checks for invalid input and allows for a maximum of 2 non-consecutive wildcards
+        
+        $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=*$InputStr*)(GivenName=*$InputStr*)(SN=*$InputStr*))" | Select-Object GivenName, SurName, SamAccountName)
+    } Else {
+        
+        Return
+    }
     
     Return $UsrObject
 }
