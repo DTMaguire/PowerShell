@@ -1,19 +1,37 @@
 ﻿# PowerShell script to export a list of groups for a specified user
-# Version 2.0 - Copyright DM Tech 2019
+# Version 3.0 - Copyright DM Tech 2019
 #
 # This script prompts for an AD account name to generate a list of groups that the specified user belongs to
-# It then both writes a list of groups to the screen and a text file sorted by name
+# It then both writes a list of groups sorted by name to the screen and a CSV file
 
 #Requires -Modules ActiveDirectory
 
-Write-Host -ForegroundColor 'Magenta' "`nPowerShell script to export a list of groups a specified user belongs to (excluding `'Domain Users`')"
+Write-Host -ForegroundColor 'Cyan' "`nPowerShell script to export a list of groups that a specified user belongs to`n"
 
 # Global variables 
 $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
 $OutputDir = "..\Output"
 
-If( !(Test-Path $OutputDir)) {
+function AccountLookup {
+    param ( $InputStr )
+
+    # Perform a look up with an LDAPFilter query using the input string and wildcards
+    $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=*$InputStr*)(GivenName=*$InputStr*)(SurName=*$InputStr*))" | Select-Object GivenName, SurName, SamAccountName)
+    
+    Return $UsrObject
+}
+
+function GetGroups {
+    param ( $UsrObject )
+
+    # Generate a list of groups for a single matched user account
+    $Groups = (Get-ADPrincipalGroupMembership -Identity $UsrObject.SamAccountName | Get-ADGroup -Properties * | Sort-Object | Select-Object -Property Name, GroupCategory, Description)
+
+    Return $Groups
+}
+
+If ( !(Test-Path $OutputDir) ) {
 
     Write-Host -ForegroundColor 'Magenta' "`nPath to `'$OutputDir`' does not exist, creating it under:"
 
@@ -25,61 +43,56 @@ If( !(Test-Path $OutputDir)) {
 Do {
 
     # Get input for name lookup
-    $Lookup = Read-Host -Prompt "`nEnter a user's first, last or SAM account name to export groups from, or 'q' to quit"
+    Write-Host -ForegroundColor 'White' "Enter a user's first, last or SAM account name to get group memberships from, or 'q' to quit: " -NoNewline
+    $InputStr = Read-Host
 
     # Check if 'q' has been entered
-    If ($Lookup -eq "q") {
+    If ( $InputStr -eq "q" ) {
 
         Write-Host "Quitting..."
         $Quit = $True
-    }
 
-    Else {
+    } ElseIf ( $InputStr.length -lt 2 ) {
 
-        Try {
+        Write-Host -ForegroundColor 'Magenta' "`nPlease Enter 2 or more characters!`n"
 
-            # Attempt to resolve the input to a user object in the directory
-            $Result = (Get-ADuser -Filter {SamAccountName -like $Lookup -or Name -like $Lookup -or GivenName -like $Lookup -or SurName -like $lookup})
+    } Else {
+        
+        # Attempt to resolve the input to a user object in the directory
+        $UsrObject = AccountLookup $InputStr
+        $ObjCount = ($UsrObject | Measure-Object).Count
+
+        # Check if more than one object is returned by the lookup
+        If ( $ObjCount -gt 1 ) {
+
+            Write-Host -ForegroundColor 'Magenta' "`n`n$ObjCount matches found, please narrow search to one of the following accounts:"
+        
+            # Output the list of matched user accounts
+            $UsrObject | Format-Table -AutoSize | Write-Output
+    
+        } ElseIf ( $ObjCount -eq 1 ) {
             
-            # Create a variable with the SAM for easy access
-            $UserSam = $Result.SamAccountName
+            # Get the group memberships for a single user object
+            $Groups = GetGroups $UsrObject
 
-            # Check if more than one object is returned by the lookup
-            If (($Result | Measure-Object).Count -gt 1) {
+            # Generate a relevant filename
+            $FilePath = Join-Path -Path $OutputDir -ChildPath "GroupMembership_$($UsrObject.SamAccountName)-$Timestamp.csv"
 
-                Write-Host -ForegroundColor 'Cyan' "`nMultiple matches found, please narrow search to one of the following accounts:`n"
-                
-                # Output list of user accounts
-                Write-Output $UserSam 
-            }
+            # Output user details to the screen
+            Write-Host -ForegroundColor 'Green' "`n`nResolved account name to user:"
+            Write-Output $UsrObject | Format-Table
 
-            Else {
-            
-                # Generate a relevant filename, -Path can be adjusted as required
-                $File = "GroupMembership_$UserSam-$Timestamp.txt"
-                $FileName = (Join-Path -Path "..\Output" -ChildPath $File)
+            # Output group details to the screen
+            Write-Host -ForegroundColor 'Green' "Writing groups to `'$FilePath`':"
+            Write-Output $Groups | Select-Object Name, GroupCategory | Format-Table
+        
+            # Write the groups to a CSV file
+            $Groups | Export-Csv -NoTypeInformation -Path $FilePath
 
-                # Generate a list of groups for a single matched user account
-                $Groups = (Get-ADUser -Identity $UserSam -Properties MemberOf | Select-Object -ExpandProperty MemberOf | Get-ADGroup | Sort-Object | Select-Object -Property Name)
-            
-                Write-Host -ForegroundColor 'Green' "`nWriting the following groups to `'$FileName`':`n"
-                        
-                # Output to the screen by name only
-                Write-Output $Groups.Name
+        } Else {
 
-                # Write the groups to a file
-                Out-File -FilePath $FileName -InputObject $Groups
-
-                # Output to screen and write to file
-                #Tee-Object -InputObject $Groups -FilePath $FileName
-                # Works fine but doesn't include the 'Name' header which could be useful for future parsing of the text files
-            }
-        }
-
-        Catch {
-
-            # If triggered, print an error and jump back up to the 'Do' loop
-            Write-Host -ForegroundColor 'Magenta' "`nUnable to find account name matching input: `'$Lookup`'"
+            # If nothing matches, print an error and jump back up to the 'Do' loop
+            Write-Host -ForegroundColor 'Magenta' "`nUnable to find account name matching input: `'$InputStr`'`n"
             Continue
         }
     }
