@@ -20,10 +20,10 @@ function AccountLookup {
     if ($InputStr -match '\*?[-\w]+\s?\*?') { 
 
         try {       # Test if input exactly matches a user identity (SamAccountName)
-            $UsrObject = (Get-ADUser -Identity $InputStr | Select-Object GivenName, SurName, SamAccountName)
+            $UsrObject = (Get-ADUser -Identity $InputStr | Select-Object GivenName,SurName,SamAccountName,UserPrincipalName)
         }
         catch {     # Otherwise, fall back to an LDAPFilter query which allows wildcard searches
-            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" | Select-Object GivenName, SurName, SamAccountName)
+            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" | Select-Object GivenName,SurName,SamAccountName,UserPrincipalName)
         }
 
     } else {        # Otherwise, just return nothing instead of generating an error
