@@ -3,8 +3,6 @@
 #
 # This script prompts for an AD account name to generate a list of groups that the specified user belongs to
 # It then both writes a list of groups sorted by name to the screen and a CSV file
-######## Current Issues!
-#   If two accounts exist where the input string exactly matches different attributes of both, neither will be able to be selected
 
 #Requires -Modules ActiveDirectory
 
@@ -17,17 +15,23 @@ $OutputDir = "..\Output"
 
 function AccountLookup {
     param ( $InputStr )
+    
+    # Try to perform a look up, but filter invalid input with a regular expression that allows for a maximum of 2 non-consecutive wildcards or spaces
+    if ($InputStr -match '\*?[-\w]+\s?\*?') { 
 
-    # Try to perform a look up with an LDAPFilter query, otherwise just return nothing instead of generating an error
-    If ($InputStr -match '\*?\w+-?\*?') { # Regular expression checks for invalid input and allows for a maximum of 2 non-consecutive wildcards
+        try {       # Test if input exactly matches a user identity (SamAccountName)
+            $UsrObject = (Get-ADUser -Identity $InputStr | Select-Object GivenName, SurName, SamAccountName)
+        }
+        catch {     # Otherwise, fall back to an LDAPFilter query which allows wildcard searches
+            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" | Select-Object GivenName, SurName, SamAccountName)
+        }
+
+    } else {        # Otherwise, just return nothing instead of generating an error
         
-        $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=*$InputStr*)(GivenName=*$InputStr*)(SN=*$InputStr*))" | Select-Object GivenName, SurName, SamAccountName)
-    } Else {
-        
-        Return
+        return
     }
     
-    Return $UsrObject
+    return $UsrObject
 }
 
 function GetGroups {
@@ -36,10 +40,10 @@ function GetGroups {
     # Generate a list of groups for a single matched user account
     $Groups = (Get-ADPrincipalGroupMembership -Identity $UsrObject.SamAccountName | Get-ADGroup -Properties * | Sort-Object | Select-Object -Property Name, GroupCategory, Description)
 
-    Return $Groups
+    return $Groups
 }
 
-If ( !(Test-Path $OutputDir) ) {
+if ( !(Test-Path $OutputDir) ) {
 
     Write-Host -ForegroundColor 'Magenta' "`nPath to `'$OutputDir`' does not exist, creating it under:"
 
@@ -48,37 +52,37 @@ If ( !(Test-Path $OutputDir) ) {
 }
 
 # Continue prompting for account names until 'q' is entered
-Do {
+do {
 
     # Get input for name lookup
-    Write-Host -ForegroundColor 'White' "Enter a user's first, last or SAM account name to get group memberships from, or 'q' to quit: " -NoNewline
+    Write-Host -ForegroundColor 'White' "Input name to search for user account (wildcards supported), or 'q' to quit`n`n> " -NoNewline
     $InputStr = Read-Host
 
     # Check if 'q' has been entered
-    If ( $InputStr -eq "q" ) {
+    if ( $InputStr -eq "q" ) {
 
-        Write-Host "Quitting..."
+        Write-Host -ForegroundColor 'White' "`nQuitting...`n"
         $Quit = $True
 
-    } ElseIf ( $InputStr.length -lt 2 ) {
+    } elseif ( $InputStr.length -lt 2 ) {
 
         Write-Host -ForegroundColor 'Magenta' "`nPlease Enter 2 or more characters!`n"
 
-    } Else {
+    } else {
         
         # Attempt to resolve the input to a user object in the directory
         $UsrObject = AccountLookup $InputStr
         $ObjCount = ($UsrObject | Measure-Object).Count
 
         # Check if more than one object is returned by the lookup
-        If ( $ObjCount -gt 1 ) {
+        if ( $ObjCount -gt 1 ) {
 
             Write-Host -ForegroundColor 'Magenta' "`n`n$ObjCount matches found, please narrow search to one of the following accounts:"
         
             # Output the list of matched user accounts
             $UsrObject | Format-Table -AutoSize | Write-Output
     
-        } ElseIf ( $ObjCount -eq 1 ) {
+        } elseif ( $ObjCount -eq 1 ) {
             
             # Get the group memberships for a single user object
             $Groups = GetGroups $UsrObject
@@ -97,12 +101,12 @@ Do {
             # Write the groups to a CSV file
             $Groups | Export-Csv -NoTypeInformation -Path $FilePath
 
-        } Else {
+        } else {
 
             # If nothing matches, print an error and jump back up to the 'Do' loop
             Write-Host -ForegroundColor 'Magenta' "`nUnable to find account name matching input: `'$InputStr`'`n"
-            Continue
+            continue
         }
     }
 
-} Until ($Quit)
+} until ($Quit)
