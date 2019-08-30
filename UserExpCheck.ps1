@@ -35,7 +35,6 @@ function AccountLookup {
     return $UsrObject
 }
 
-
 if ( !(Test-Path $OutputDir) ) {
 
     Write-Host -ForegroundColor 'Magenta' "`nPath to `'$OutputDir`' does not exist, creating it under:"
@@ -84,9 +83,9 @@ do {
             Write-Host -ForegroundColor 'Green' "`nResolved account name to user:"
             Write-Output $UsrObject | Format-List
 
-            # Write the groups to a CSV file
+            # Write the output to a CSV file
             Write-Host -ForegroundColor 'Green' "Adding to $FilePath`n"
-            $UsrObject | Export-Csv -NoTypeInformation -Path $FilePath
+            $UsrObject | Export-Csv -NoTypeInformation -Append -Path $FilePath
 
         } else {
 
