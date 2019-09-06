@@ -10,22 +10,23 @@ $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
 $OutputDir = "..\Output"
 $PDC = (Get-ADDomain).PDCEmulator
+$AccProps = @("GivenName","SurName","Title","SamAccountName","UserPrincipalName","AccountExpirationDate","AccountLockoutTime","BadLogonCount",`
+    "Enabled","LastBadPasswordAttempt","LastLogonDate","LockedOut","lockoutTime","PasswordExpired","PasswordLastSet","PasswordNeverExpires")
 
 function AccountLookup {
     param ($InputStr)
     
-    # Filter invalid input with a regular expression that allows for a maximum of 2 non-consecutive wildcards or spaces
+    # Filter invalid input with a regular expression allowing for a maximum of 2 non-consecutive wildcards or spaces
     if ($InputStr -match '\*?[-\w]+\s?\*?') { 
 
         try {       # Test if input exactly matches a user identity (SamAccountName)
-            $UsrObject = (Get-ADUser -Identity $InputStr -Server $PDC -Properties * | Select-Object `
-            -Property GivenName,SurName,SamAccountName,UserPrincipalName,AccountExpirationDate,AccountLockoutTime,BadLogonCount,`
-            Enabled,LastBadPasswordAttempt,LastLogonDate,LockedOut,lockoutTime,PasswordExpired,PasswordLastSet,PasswordNeverExpires)
+
+            $UsrObject = (Get-ADUser -Identity $InputStr -Server $PDC -Properties * | Select-Object -Property $AccProps)
         }
-        catch {     # Otherwise, fall back to an LDAPFilter query which allows wildcard searches
-            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" -Server $PDC -Properties * | Select-Object `
-            -Property GivenName,SurName,SamAccountName,UserPrincipalName,AccountExpirationDate,AccountLockoutTime,BadLogonCount,`
-            Enabled,LastBadPasswordAttempt,LastLogonDate,LockedOut,lockoutTime,PasswordExpired,PasswordLastSet,PasswordNeverExpires)
+        catch {     # Fall back to an LDAPFilter query which allows wildcard searches
+
+            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" `
+            -Server $PDC -Properties * | Select-Object -Property $AccProps)
         }
 
     } else {        # Otherwise, just return nothing instead of generating an error
@@ -61,19 +62,20 @@ do {
         
         # Attempt to resolve the input to a user object in the directory
         $UsrObject = AccountLookup $InputStr
+
         $ObjCount = ($UsrObject | Measure-Object).Count
 
         # Determine path to take depending on number of objects returned by lookup
         if ($ObjCount -gt 1) {
 
             Write-Host -ForegroundColor 'Magenta' "`n$ObjCount matches found, please narrow search to one of the following accounts:"
-            $UsrObject | Select-Object GivenName,SurName,SamAccountName,UserPrincipalName | Format-Table -AutoSize | Write-Output
+            $UsrObject | Select-Object GivenName,SurName,Title,SamAccountName,UserPrincipalName | Format-Table
     
         } elseif ($ObjCount -eq 1) {
             
             $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExpiry_$Timestamp.csv"
-            Write-Host -ForegroundColor 'Green' "`nResolved account name to user: $($UsrObject.Name)"
-            Write-Output $UsrObject | Format-List
+            Write-Host -ForegroundColor 'Green' "`nResolved account name to:"
+            $UsrObject | Format-List
 
             try {
 
