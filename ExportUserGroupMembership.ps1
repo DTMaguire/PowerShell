@@ -12,6 +12,7 @@ Write-Host -ForegroundColor 'Cyan' "`nPowerShell script to export a list of grou
 $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
 $OutputDir = "..\Output"
+$AccProps = @("GivenName","SurName","Title","SamAccountName","UserPrincipalName","CanonicalName")
 
 function AccountLookup {
     param ($InputStr)
@@ -20,11 +21,13 @@ function AccountLookup {
     if ($InputStr -match '\*?[-\w]+\s?\*?') { 
 
         try {       # Test if input exactly matches a user identity (SamAccountName)
-            $UsrObject = (Get-ADUser -Identity $InputStr -Properties * | Select-Object GivenName,SurName,SamAccountName,UserPrincipalName,CanonicalName)
+
+            $UsrObject = (Get-ADUser -Identity $InputStr -Properties * | Select-Object -Property $AccProps)
         }
         catch {     # Otherwise, fall back to an LDAPFilter query which allows wildcard searches
+
             $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" -Properties * `
-            | Select-Object GivenName,SurName,SamAccountName,UserPrincipalName,CanonicalName)
+            | Select-Object -Property $AccProps)
         }
 
     } else {        # Otherwise, just return nothing instead of generating an error
@@ -40,7 +43,7 @@ function GetGroups {
 
     # Generate a list of groups for a matched user account
     $Groups = (Get-ADPrincipalGroupMembership -Identity $UsrObject.SamAccountName | Get-ADGroup -Properties * `
-    | Sort-Object | Select-Object -Property Name, SamAccountName, GroupCategory, Description)
+        | Sort-Object | Select-Object -Property Name, SamAccountName, GroupCategory, Description)
 
     return $Groups
 }
@@ -74,31 +77,30 @@ do {
         $UsrObject = AccountLookup $InputStr
 
         $ObjCount = ($UsrObject | Measure-Object).Count
-        $UsrProps = ($UsrObject | Select-Object -Property  GivenName,SurName,SamAccountName,UserPrincipalName)
-        $UsrLoc = ($UsrObject | Select-Object -Property CanonicalName)
+        $UsrProps = ($UsrObject | Select-Object -Property  GivenName,SurName,Title,SamAccountName,UserPrincipalName)
 
         # Determine path to take depending on number of objects returned by lookup
         if ($ObjCount -gt 1) {
 
             Write-Host -ForegroundColor 'Magenta' "`n`n$ObjCount matches found, please narrow search to one of the following accounts:"
-            $UsrProps | Format-Table -AutoSize | Write-Output
+            $UsrProps | Format-Table
     
         } elseif ($ObjCount -eq 1) {
             
             $Groups = GetGroups $UsrObject
 
-            $FilePath = Join-Path -Path $OutputDir -ChildPath "GroupMembership_$($UsrObject.SamAccountName)-$Timestamp.csv"
+            $FilePath = Join-Path -Path $OutputDir -ChildPath "GroupMembership_${$UsrObject.SamAccountName}-$Timestamp.csv"
 
             # Output user details to the screen
             Write-Host -ForegroundColor 'Green' "`n`nResolved account name to user:"
-            Write-Output $UsrProps | Format-Table
+            $UsrProps | Format-Table
 
             Write-Host -ForegroundColor 'Green' "Under OU:`n"
-            Write-Output "$($UsrLoc.CanonicalName)"
+            Write-Output $UsrObject.CanonicalName
             Start-Sleep 1
 
             Write-Host -ForegroundColor 'Green' "`n`nGroup memberships:"
-            Write-Output $Groups | Select-Object Name, GroupCategory | Format-Table
+            $Groups | Select-Object -Property Name, GroupCategory | Format-Table
 
             try {
 
