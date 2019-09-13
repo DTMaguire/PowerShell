@@ -10,8 +10,7 @@ $Quit = $False
 $Timestamp = Get-Date -Format yyyyMMdd
 $OutputDir = "..\Output"
 $PDC = (Get-ADDomain).PDCEmulator
-$AccProps = @("GivenName","SurName","Title","SamAccountName","UserPrincipalName","AccountExpirationDate","AccountLockoutTime","BadLogonCount",`
-    "Enabled","LastBadPasswordAttempt","LastLogonDate","LockedOut","lockoutTime","PasswordExpired","PasswordLastSet","PasswordNeverExpires")
+$AccProps = @("GivenName","SurName","Title","SamAccountName","UserPrincipalName","Enabled","LastLogonDate","PasswordExpired","PasswordLastSet","PasswordNeverExpires","AccountExpirationDate","BadLogonCount","LastBadPasswordAttempt","LockedOut","AccountLockoutTime")
 
 function AccountLookup {
     param ($InputStr)
@@ -25,8 +24,7 @@ function AccountLookup {
         }
         catch {     # Fall back to an LDAPFilter query which allows wildcard searches
 
-            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" `
-            -Server $PDC -Properties * | Select-Object -Property $AccProps)
+            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" -Server $PDC -Properties * | Select-Object -Property $AccProps)
         }
 
     } else {        # Otherwise, just return nothing instead of generating an error
