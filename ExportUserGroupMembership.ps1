@@ -26,11 +26,10 @@ function AccountLookup {
         }
         catch {     # Otherwise, fall back to an LDAPFilter query which allows wildcard searches
 
-            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" -Properties * `
-            | Select-Object -Property $AccProps)
+            $UsrObject = (Get-ADUser -LDAPFilter "(|(SamAccountName=$InputStr)(GivenName=$InputStr)(SN=$InputStr))" -Properties * | Select-Object -Property $AccProps)
         }
 
-    } else {        # Otherwise, just return nothing instead of generating an error
+    } else {        # If all else fails, just return nothing instead of generating a nasty red error mesasge
         
         return
     }
@@ -42,8 +41,7 @@ function GetGroups {
     param ($UsrObject)
 
     # Generate a list of groups for a matched user account
-    $Groups = (Get-ADPrincipalGroupMembership -Identity $UsrObject.SamAccountName | Get-ADGroup -Properties * `
-        | Sort-Object | Select-Object -Property Name, SamAccountName, GroupCategory, Description)
+    $Groups = (Get-ADPrincipalGroupMembership -Identity $UsrObject.SamAccountName | Get-ADGroup -Properties * | Sort-Object | Select-Object -Property Name, SamAccountName, GroupCategory, Description)
 
     return $Groups
 }
@@ -89,7 +87,7 @@ do {
             
             $Groups = GetGroups $UsrObject
 
-            $FilePath = Join-Path -Path $OutputDir -ChildPath "GroupMembership_${$UsrObject.SamAccountName}-$Timestamp.csv"
+            $FilePath = Join-Path -Path $OutputDir -ChildPath "GroupMembership_$($UsrProps.SamAccountName)-$Timestamp.csv"
 
             # Output user details to the screen
             Write-Host -ForegroundColor 'Green' "`n`nResolved account name to user:"
@@ -100,7 +98,7 @@ do {
             Start-Sleep 1
 
             Write-Host -ForegroundColor 'Green' "`n`nGroup memberships:"
-            $Groups | Select-Object -Property Name, GroupCategory | Format-Table
+            $Groups | Select-Object -Property Name, GroupCategory, Description | Format-Table
 
             try {
 
