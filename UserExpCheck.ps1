@@ -7,7 +7,7 @@ Write-Host -ForegroundColor 'Cyan' "`nPowerShell script to gather account expiry
 
 # Global variables 
 $Quit = $False
-$Timestamp = Get-Date -Format yyyyMMdd
+$DateStamp = Get-Date -Format yyyyMM
 $OutputDir = "..\Output"
 $PDC = (Get-ADDomain).PDCEmulator
 $AccProps = @("GivenName","SurName","Title","SamAccountName","UserPrincipalName","Enabled","LastLogonDate","PasswordExpired","PasswordLastSet","PasswordNeverExpires","AccountExpirationDate","BadLogonCount","LastBadPasswordAttempt","LockedOut","AccountLockoutTime")
@@ -35,6 +35,21 @@ function AccountLookup {
     return $UsrObject
 }
 
+function GetPasswordExp {
+    param ($UsrSam)
+
+    if ($UsrObject.PasswordNeverExpires -eq $True) {
+
+        $PasswordExp = $null
+    } else {
+
+        $PasswordExpInt = (Get-ADUser -Identity $UsrSam -Properties msDS-UserPasswordExpiryTimeComputed | Select-Object -ExpandProperty "msDS-UserPasswordExpiryTimeComputed")
+        $PasswordExp = ([datetime]::FromFileTime($PasswordExpInt))
+    }
+
+    return $PasswordExp
+}
+
 if (!(Test-Path $OutputDir)) {
 
     Write-Host -ForegroundColor 'Magenta' "`nPath to `'$OutputDir`' does not exist, creating it under:"
@@ -58,12 +73,10 @@ do {
 
     } else {
         
-        # Attempt to resolve the input to a user object in the directory
         $UsrObject = AccountLookup $InputStr
-
         $ObjCount = ($UsrObject | Measure-Object).Count
 
-        # Determine path to take depending on number of objects returned by lookup
+        # Determine path to take depending on number of objects returned by AccountLookup
         if ($ObjCount -gt 1) {
 
             Write-Host -ForegroundColor 'Magenta' "`n$ObjCount matches found, please narrow search to one of the following accounts:"
@@ -71,15 +84,22 @@ do {
     
         } elseif ($ObjCount -eq 1) {
             
-            $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExpiry_$Timestamp.csv"
-            Write-Host -ForegroundColor 'Green' "`nResolved account name to:"
+            $PasswordExp = GetPasswordExp $UsrObject.SamAccountName
+            Add-Member -InputObject $UsrObject -NotePropertyMembers @{'PasswordExpirationDate'=$PasswordExp}
+            Write-Host -ForegroundColor 'Green' "`nAccount and password details:"
             $UsrObject | Format-List
+            
+            if ($null -ne $PasswordExp) {
+
+                $Remaining = (New-TimeSpan -Start (Get-Date) -End $PasswordExp)
+                Write-Host -ForegroundColor 'White' $Remaining.Days "days," $Remaining.Hours "hours," $Remaining.Minutes "minutes until password expires.`n"
+            }
 
             try {
 
+                $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExpiry_$DateStamp.csv"
                 $UsrObject | Export-Csv -NoTypeInformation -Append -Path $FilePath
                 Write-Host -ForegroundColor 'Green' "Adding to $FilePath`n"
-
                 Write-Host -ForegroundColor 'White' "Open file? (y/N):> " -NoNewline
                 $InputStr = Read-Host
 
@@ -97,7 +117,7 @@ do {
             }
             catch {
                 
-                Write-Host -ForegroundColor 'Magenta' "Unable to open $Filepath - please close the file and try again.`n"
+                Write-Host -ForegroundColor 'Magenta' "Unable to open $Filepath for writing - please close the file try again.`n"
             } 
 
         } else {
