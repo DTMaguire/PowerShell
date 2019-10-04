@@ -1,3 +1,7 @@
+*.csv
 *.txt
+*.xlsx
 WIP/FindADUserLockouts.ps1
 WIP/NABSCP.ps1
+WIP/Get-UserLogon.psm1
+WIP/Get-Rooms.ps1

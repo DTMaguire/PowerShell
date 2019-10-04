@@ -19,6 +19,10 @@ $WSize.Width=120
 $WSize.Height=40
 $Shell.WindowSize = $WSize
 
+# Proxy settings to allow access to PowerShell Gallery
+$WebClient = New-Object System.Net.WebClient
+$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+
 # Show a custom message
 Write-Host -ForegroundColor 'White' "Running as $env:Username with profile path: $KeyPath `n"
 
