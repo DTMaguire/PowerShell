@@ -7,7 +7,7 @@ $AccountsArray = @()
 
 $OutputDir = "D:\Scripts\Output\UserExits"
 
-$OldUsers = (Import-Csv -Path "D:\Scripts\Output\SR-1093.csv")
+$OldUsers = (Import-Csv -Path "D:\Scripts\Input\Some.csv")
 
 $DispNames = (($OldUsers.DisplayName).Trim() | Sort-Object)
 

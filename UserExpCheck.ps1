@@ -92,7 +92,7 @@ do {
             if ($null -ne $PasswordExp) {
 
                 $Remaining = (New-TimeSpan -Start (Get-Date) -End $PasswordExp)
-                Write-Host -ForegroundColor 'White' $Remaining.Days "days," $Remaining.Hours "hours," $Remaining.Minutes "minutes until password expires.`n"
+                Write-Host -ForegroundColor 'White' $Remaining.Days "days," $Remaining.Hours "hours," $Remaining.Minutes "minutes until password expires.`n`n"
             }
 
             try {
@@ -100,20 +100,6 @@ do {
                 $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExpiry_$DateStamp.csv"
                 $UsrObject | Export-Csv -NoTypeInformation -Append -Path $FilePath
                 Write-Host -ForegroundColor 'Green' "Adding to $FilePath`n"
-                Write-Host -ForegroundColor 'White' "Open file? (y/N):> " -NoNewline
-                $InputStr = Read-Host
-
-                if ($InputStr -eq "y") {
-
-                    Invoke-Item -Path $FilePath
-
-                } elseif ($InputStr -eq "q") {
-
-                    Write-Host -ForegroundColor 'White' "`nQuitting...`n"
-                    $Quit = $True
-                }
-            
-                Write-Host "`n"
             }
             catch {
                 

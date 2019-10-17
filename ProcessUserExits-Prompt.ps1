@@ -1,11 +1,13 @@
 # PowerShell script to export groups for a list of old users, remove them from the groups and disable their accounts
 # Version 1.0 - Copyright DM Tech 2019
+# Run in an Exchange Management Shell for the time being...
 
 #Requires -Modules ActiveDirectory
 
 $AccountsArray = @()
 $OutputDir = "D:\Scripts\Output\UserExits"
-$DispNames = Get-Content -Path "D:\Scripts\Input\AWS-OldUsers_Remaining.txt"
+
+$DispNames = Read-Host -Prompt "Enter username"
 
 Write-Host -ForegroundColor 'White' "`nImporting the following users:`n"
 Write-Output $DispNames
@@ -25,6 +27,7 @@ Write-Host -ForegroundColor 'Green' "Total accounts matched: " $AccountsArray.Co
 
 foreach ($Account in $AccountsArray) {
 
+    $AccountSAM = $Account.SamAccountName
     Write-Host -ForegroundColor 'Cyan' "`nUser: $($Account.Name)"
     Write-Host -ForegroundColor 'White' "`nGroup membership:`n"
 
@@ -37,22 +40,25 @@ foreach ($Account in $AccountsArray) {
     } else {
 
         $Groups | Out-String
-        Write-Host -ForegroundColor 'White' "Removing from groups...`n"
+        Write-Host -ForegroundColor 'White' $Groups.Count "total - removing from groups:`n"
 
         foreach ($Group in $Groups) {
 
-            Remove-ADGroupMember -Identity $Group -Member $Account.SamAccountName -Confirm:$false -WhatIf
+            Write-Output $Group
+            Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false -WhatIf
         }
     }
 
     Start-Sleep -Milliseconds 250
-    Write-Host -ForegroundColor 'White' "Disabling account...`n"
-    Disable-ADAccount -Identity $Account.SamAccountName -Confirm:$false -WhatIf
+    Write-Host -ForegroundColor 'White' "`nDisabling account...`n"
+    Disable-ADAccount -Identity $AccountSAM -Confirm:$false -WhatIf
 
     Start-Sleep -Milliseconds 250
-    $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($Account.SamAccountName)_Groups.txt"
+    $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "Saving to: $FilePath`n"
     
     Start-Sleep -Milliseconds 250
-    $Groups | Out-File $FilePath
+    #$Groups | Out-File $FilePath -NoClobber
+
+    Set-RemoteMailbox -Identity $AccountSAM -HiddenFromAddressListsEnabled $True
 }

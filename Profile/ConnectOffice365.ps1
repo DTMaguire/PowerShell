@@ -5,7 +5,7 @@
 $UserCredential = (Get-StoredCredential -UserName $Env:AdminUPN)
 
 # Connecto to Azure
-Connect-AzAccount -Credential $UserCredential
+#Connect-AzAccount -Credential $UserCredential
 
 # Connect to Exchange Online
 $ExchSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $UserCredential -Authentication "Basic" -AllowRedirection
