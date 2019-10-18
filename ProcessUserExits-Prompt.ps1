@@ -54,11 +54,11 @@ foreach ($Account in $AccountsArray) {
     Disable-ADAccount -Identity $AccountSAM -Confirm:$false -WhatIf
 
     Start-Sleep -Milliseconds 250
-    $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_($AccountSAM)_Groups.txt"
+    $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "Saving to: $FilePath`n"
     
     Start-Sleep -Milliseconds 250
-    #$Groups | Out-File $FilePath -NoClobber
+    $Groups | Out-File $FilePath -NoClobber
 
-    Set-RemoteMailbox -Identity $AccountSAM -HiddenFromAddressListsEnabled $True
+    Set-RemoteMailbox -Identity $AccountSAM -HiddenFromAddressListsEnabled $True -WhatIf
 }
