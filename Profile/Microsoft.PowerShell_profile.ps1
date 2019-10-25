@@ -1,5 +1,6 @@
 # This is the default profile loaded by PowerShell upon launch
 # It's normally located under: C:\Users\(UserName)\Documents\WindowsPowerShell
+# - or for PowerShell Core (v6+): C:\Users\(UserName)\Documents\PowerShell
 #
 # This file is just used for setting the user-scope environment variable and launching the main script
 # Because I'm using multiple accounts, I just copy this into the location above for each one

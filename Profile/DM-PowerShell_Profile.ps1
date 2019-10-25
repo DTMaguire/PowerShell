@@ -1,10 +1,11 @@
 # Profile script called by Microsoft.PowerShell_profile.ps1
-Set-Location -Path 'D:\Scripts\PowerShell'
+Set-Location -Path $env:DevPath
 
 # Shell variables
 $Shell = $Host.UI.RawUI
 #$Shell.WindowTitle=""
 $KeyPath = "$Home\Documents\WindowsPowerShell"
+$env:PSModulePath = ($env:PSModulePath) + (";" + $env:DevPath + "Modules\")
 
 # Run the following sript to enable the Get-StoredCredential cmdlet from the KeyPath
 . ".\Profile\Functions-PSStoredCredentials.ps1"
