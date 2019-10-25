@@ -8,28 +8,30 @@
 
 $NameList = @()
 $AccountsArray = @()
-$OutputDir = "D:\Scripts\Output\UserExits"
-$ExchFQDN = "address.goes.here"
+$NotMatched = @()
+$OutputDir = "\\SomeNetworkDrive\ICT Operations\User Offboarding"
+$ExchFQDN = "someexchange.server.here"
 $SessionCreated = $false
 
-function GetUserAccount {
-    param ($Name)
-    Get-ADUser -Filter {Name -eq $Name -or SamAccountName -eq $Name} -Properties * | Select-Object Name, SamAccountName, UserPrincipalName, Memberof, Enabled
+function GetUserAccount ($Name) {
+
+    Get-ADUser -Filter {Name -eq $Name -or SamAccountName -eq $Name} -Properties * | Select-Object Name, SamAccountName, UserPrincipalName, Memberof, Enabled, Description
 }
 
-function SetSharedMailbox {
-    param ($UserSAM)
-    if(Get-RemoteMailbox $UserSAM -ErrorAction SilentlyContinue) {
-        Write-Host -ForegroundColor 'White' "`nSet mailbox for `'$UserSAM`' to shared (y/N)? " -NoNewline
+function SetSharedMailbox ($AccountSAM) {
+
+    if(Get-RemoteMailbox $AccountSAM -ErrorAction SilentlyContinue) {
+        Set-RemoteMailbox -Identity $AccountSAM -AcceptMessagesOnlyFrom $AccountSAM -HiddenFromAddressListsEnabled $True -WhatIf
+        Write-Host -ForegroundColor 'White' "`nSet mailbox for `'$AccountSAM`' to shared (y/N)? " -NoNewline
         if ((Read-Host) -eq 'y') {
-            Set-RemoteMailbox -Identity $UserSAM -HiddenFromAddressListsEnabled $True #-WhatIf
+            Set-ADUser -Identity $AccountSAM -Replace @{msExchRemoteRecipientType=100;msExchRecipientTypeDetails=34359738368} -WhatIf
         }
     } else {
-        Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$UserSAM`' found!"
+        Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountSAM`' found!"
     }
 }
-function RemoveFromGroups {
-    param ($AccountSAM, $Groups)
+function RemoveFromGroups ($AccountSAM, $Groups) {
+
     Write-Host -ForegroundColor 'White' "`nGroup membership:`n"
     $Groups | Out-String
     Write-Host -ForegroundColor 'White' "Total groups: $($Groups.Count)`n"
@@ -37,15 +39,14 @@ function RemoveFromGroups {
     foreach ($Group in $Groups) {
         Start-Sleep -Milliseconds 100
         Write-Host -ForegroundColor 'White' "Removing from:" $Group
-        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false #-WhatIf
+        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false -WhatIf
     }
 
     $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "`nSaving to: $FilePath"
-    $Groups | Out-File $FilePath -NoClobber #-WhatIf
+    $Groups | Out-File $FilePath -NoClobber -WhatIf
 }
-function ProcessExit {
-    param ($Account)
+function ProcessExit ($Account) {
 
     $AccountSAM = $Account.SamAccountName
     Write-Host -ForegroundColor 'Cyan' "`nUser: $($Account.Name)"
@@ -60,14 +61,18 @@ function ProcessExit {
 
     if ($Account.Enabled -eq $True) {
         Write-Host -ForegroundColor 'White' "`nDisabling account..."
-        Disable-ADAccount -Identity $AccountSAM -Confirm:$false #-WhatIf
+        Disable-ADAccount -Identity $AccountSAM -Confirm:$false -WhatIf
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nAccount already disabled!"
     }
+    
+    $Account.Description += (" -- Exit Processed: " + (Get-Date).ToShortDateString())
+    Set-ADUser -Identity $AccountSAM -Description $Account.Description
+    
     SetSharedMailbox $AccountSAM
 }
 
-Write-Host -ForegroundColor 'White' "`nStarting user exit script...`n"
+Write-Host -ForegroundColor 'White' "`nStarting user exit script`n"
 
 do {
     $ReadInput = (Read-Host -Prompt "Enter usernames seperated by commas, or `'q`' to quit")
@@ -88,20 +93,27 @@ foreach ($Name in $NameList) {
 
 if ($AccountsArray.Length -gt 0) {
 
-    if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchFQDN}) {
-        Write-Host -ForegroundColor 'White' "`nDetected active Exchange session..."
-    } else {
-        Write-Host -ForegroundColor 'White' "`nRemote Exchange session starting..."
-        Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$ExchFQDN/powershell/") -AllowClobber -CommandName "*-RemoteMailbox"
-        $SessionCreated = $true
-    }
-    
-    Write-Host -ForegroundColor 'White' "`nAccount name matches found:" -NoNewline
+    Write-Host -ForegroundColor 'White' "`nAccount name matches found:"
     $AccountsArray | Format-Table -Property Name, SamAccountName, UserPrincipalName, Enabled
 
     Write-Host -ForegroundColor 'Green' "Total accounts matched: " $AccountsArray.Count
+
+    if ($NotMatched.Count -eq 1) {
+        Write-Host -ForegroundColor 'Magenta' "`n`nNo account match for:`n"
+        Write-Output $NotMatched
+    } elseif ($NotMatched.Count -gt 1) {
+        Write-Host -ForegroundColor 'Magenta' "`n`nNo account matches for $($NotMatched.Count) names, please check input for:`n"
+        Write-Output $NotMatched
+    }
     
     if ((Read-Host -Prompt "`n`nRun exit process for these accounts (y/N)?") -eq 'y') {
+        if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchFQDN}) {
+            Write-Host -ForegroundColor 'White' "`nDetected active Exchange session..."
+        } else {
+            Write-Host -ForegroundColor 'White' "`nRemote Exchange session starting..."
+            Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$ExchFQDN/powershell/") -AllowClobber -CommandName "*-RemoteMailbox" | Out-Null
+            $SessionCreated = $true
+        }
         foreach ($Account in $AccountsArray) {
             ProcessExit $Account
         }
