@@ -31,6 +31,7 @@ function SetSharedMailbox ($AccountSAM) {
         Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountSAM`' found!"
     }
 }
+
 function RemoveFromGroups ($AccountSAM, $Groups) {
 
     Write-Host -ForegroundColor 'White' "`nGroup membership:`n"
@@ -47,6 +48,7 @@ function RemoveFromGroups ($AccountSAM, $Groups) {
     Write-Host -ForegroundColor 'Green' "`nSaving to: $FilePath"
     $Groups | Out-File $FilePath -NoClobber #-WhatIf
 }
+
 function ProcessExit ($Account) {
 
     Write-Host -ForegroundColor 'Cyan' "`nUser: $($Account.Name)"
@@ -135,6 +137,7 @@ if ($AccountsArray.Length -gt 0) {
             ProcessExit $Account
         }
     }
+    
 } else {
     Write-Host -ForegroundColor 'Magenta' "`nNo account name matches found!"
 }
