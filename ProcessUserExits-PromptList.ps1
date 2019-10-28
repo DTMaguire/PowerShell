@@ -9,22 +9,23 @@
 $NameList = @()
 $AccountsArray = @()
 $NotMatched = @()
-$OutputDir = "\\SomeNetworkDrive\ICT Operations\User Offboarding"
-$ExchFQDN = "someexchange.server.here"
+$OutputDir = "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding"
+$ExchFQDN = "sydawsexchange.trs.nsw"
 $SessionCreated = $false
 
 function GetUserAccount ($Name) {
 
-    Get-ADUser -Filter {Name -eq $Name -or SamAccountName -eq $Name} -Properties * | Select-Object Name, SamAccountName, UserPrincipalName, Memberof, Enabled, Description
+    Get-ADUser -Filter {Name -like $Name -or SamAccountName -like $Name} -Properties * | `
+    Select-Object Name, SamAccountName, UserPrincipalName, Memberof, Enabled, Description, Info
 }
 
 function SetSharedMailbox ($AccountSAM) {
 
     if(Get-RemoteMailbox $AccountSAM -ErrorAction SilentlyContinue) {
-        Set-RemoteMailbox -Identity $AccountSAM -AcceptMessagesOnlyFrom $AccountSAM -HiddenFromAddressListsEnabled $True -WhatIf
+        Set-RemoteMailbox -Identity $AccountSAM -AcceptMessagesOnlyFrom $AccountSAM -HiddenFromAddressListsEnabled $True #-WhatIf
         Write-Host -ForegroundColor 'White' "`nSet mailbox for `'$AccountSAM`' to shared (y/N)? " -NoNewline
         if ((Read-Host) -eq 'y') {
-            Set-ADUser -Identity $AccountSAM -Replace @{msExchRemoteRecipientType=100;msExchRecipientTypeDetails=34359738368} -WhatIf
+            Set-ADUser -Identity $AccountSAM -Replace @{msExchRemoteRecipientType=100;msExchRecipientTypeDetails=34359738368} #-WhatIf
         }
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountSAM`' found!"
@@ -39,18 +40,24 @@ function RemoveFromGroups ($AccountSAM, $Groups) {
     foreach ($Group in $Groups) {
         Start-Sleep -Milliseconds 100
         Write-Host -ForegroundColor 'White' "Removing from:" $Group
-        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false -WhatIf
+        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false #-WhatIf
     }
 
     $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "`nSaving to: $FilePath"
-    $Groups | Out-File $FilePath -NoClobber -WhatIf
+    $Groups | Out-File $FilePath -NoClobber #-WhatIf
 }
 function ProcessExit ($Account) {
 
-    $AccountSAM = $Account.SamAccountName
     Write-Host -ForegroundColor 'Cyan' "`nUser: $($Account.Name)"
     Start-Sleep 1
+
+    if ($Account.Description -match "Exit Processed") {
+        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed - continuing!"
+        continue
+    }
+
+    $AccountSAM = $Account.SamAccountName
     $Groups = ($Account | Select-Object -ExpandProperty Memberof | Get-ADGroup | Sort-Object | Select-Object -ExpandProperty SamAccountName)
 
     if ($null -eq $Groups) {
@@ -61,19 +68,20 @@ function ProcessExit ($Account) {
 
     if ($Account.Enabled -eq $True) {
         Write-Host -ForegroundColor 'White' "`nDisabling account..."
-        Disable-ADAccount -Identity $AccountSAM -Confirm:$false -WhatIf
+        Disable-ADAccount -Identity $AccountSAM -Confirm:$false #-WhatIf
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nAccount already disabled!"
     }
-    
-    $Account.Description += (" -- Exit Processed: " + (Get-Date).ToShortDateString())
-    Set-ADUser -Identity $AccountSAM -Description $Account.Description
-    
+
+    $Account.Description += (" -- Exit Processed: " + (Get-Date).ToShortDateString() )
+    $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
+    Set-ADUser -Identity $AccountSAM -Description $Account.Description -Replace @{info="$ProcessInfo`r`n$($Account.info)"}
+
     SetSharedMailbox $AccountSAM
 }
 
 Write-Host -ForegroundColor 'White' "`nStarting user exit script`n"
-
+<#
 do {
     $ReadInput = (Read-Host -Prompt "Enter usernames seperated by commas, or `'q`' to quit")
     if ($ReadInput -eq 'q') {
@@ -82,13 +90,21 @@ do {
 } until ($ReadInput -match '[\w.]+')
 
 $NameList = @(($ReadInput).Split(",").Trim())
+#>
+$NameList = @((Get-Content -Path "D:\Scripts\Input\AWS-OldUsers_Remaining.txt") | Where-Object {$_ -ne "Jonathan Fan"})
+#$NameList += "Hugh Jorgan", "Mike Hunt", "Phil McCracken"
 
 Write-Host -ForegroundColor 'White' "`n`nImporting the following users:`n"
 Write-Output $NameList
 Write-Host -ForegroundColor 'Green' "`n`nTotal names imported: " $NameList.Count "`n"
 
 foreach ($Name in $NameList) {
-    $AccountsArray += (GetUserAccount $Name)
+    $AccountLookup = (GetUserAccount $Name)
+    if ($null -ne $AccountLookup) {
+        $AccountsArray += $AccountLookup
+    } else {
+        $NotMatched += $Name
+    }
 }
 
 if ($AccountsArray.Length -gt 0) {
@@ -114,6 +130,7 @@ if ($AccountsArray.Length -gt 0) {
             Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$ExchFQDN/powershell/") -AllowClobber -CommandName "*-RemoteMailbox" | Out-Null
             $SessionCreated = $true
         }
+        Start-Sleep 1    
         foreach ($Account in $AccountsArray) {
             ProcessExit $Account
         }
