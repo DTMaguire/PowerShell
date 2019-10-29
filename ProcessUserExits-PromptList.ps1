@@ -9,9 +9,12 @@
 $NameList = @()
 $AccountsArray = @()
 $NotMatched = @()
-$OutputDir = "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding"
+$Domain = "nswlrs.com.au"
 $ExchFQDN = "sydawsexchange.trs.nsw"
-$SessionCreated = $false
+$OutputDir = "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding"
+# $FilePath = "" # Was trying to add the filepath to the AD object notes but have given up
+$ExchSessionCreated = $false
+$O365SessionCreated = $false
 
 function GetUserAccount ($Name) {
 
@@ -19,16 +22,18 @@ function GetUserAccount ($Name) {
     Select-Object Name, SamAccountName, UserPrincipalName, Memberof, Enabled, Description, Info
 }
 
-function SetSharedMailbox ($AccountSAM) {
+function ProcessMailbox ($AccountUPN) {
 
-    if(Get-RemoteMailbox $AccountSAM -ErrorAction SilentlyContinue) {
-        Set-RemoteMailbox -Identity $AccountSAM -AcceptMessagesOnlyFrom $AccountSAM -HiddenFromAddressListsEnabled $True #-WhatIf
-        Write-Host -ForegroundColor 'White' "`nSet mailbox for `'$AccountSAM`' to shared (y/N)? " -NoNewline
+    if(Get-RemoteMailbox $AccountUPN -ErrorAction SilentlyContinue) {
+
+        Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN -HiddenFromAddressListsEnabled $True #-WhatIf
+        Write-Host -ForegroundColor 'White' "`nSet mailbox for `'$AccountUPN`' to shared (y/N)? " -NoNewline
+
         if ((Read-Host) -eq 'y') {
-            Set-ADUser -Identity $AccountSAM -Replace @{msExchRemoteRecipientType=100;msExchRecipientTypeDetails=34359738368} #-WhatIf
+            Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared <#-WhatIf#>}
         }
     } else {
-        Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountSAM`' found!"
+        Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountUPN`' found!"
     }
 }
 
@@ -59,13 +64,17 @@ function ProcessExit ($Account) {
         continue
     }
 
+    $Account.Description += (" -- Exit Processed: " + (Get-Date).ToShortDateString() )
+    $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
+
     $AccountSAM = $Account.SamAccountName
     $Groups = ($Account | Select-Object -ExpandProperty Memberof | Get-ADGroup | Sort-Object | Select-Object -ExpandProperty SamAccountName)
-
+    
     if ($null -eq $Groups) {
         Write-Host -ForegroundColor 'Magenta' "`nNo group memberships found!"
     } else {
         RemoveFromGroups $AccountSAM $Groups
+        #$ProcessInfo += "`r`nPrevious group memberships: $FilePath"
     }
 
     if ($Account.Enabled -eq $True) {
@@ -75,11 +84,9 @@ function ProcessExit ($Account) {
         Write-Host -ForegroundColor 'Magenta' "`nAccount already disabled!"
     }
 
-    $Account.Description += (" -- Exit Processed: " + (Get-Date).ToShortDateString() )
-    $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
+    ProcessMailbox $Account.UserPrincipalName
+    
     Set-ADUser -Identity $AccountSAM -Description $Account.Description -Replace @{info="$ProcessInfo`r`n$($Account.info)"}
-
-    SetSharedMailbox $AccountSAM
 }
 
 Write-Host -ForegroundColor 'White' "`nStarting user exit script`n"
@@ -93,6 +100,7 @@ do {
 
 $NameList = @(($ReadInput).Split(",").Trim())
 #>
+
 $NameList = @((Get-Content -Path "D:\Scripts\Input\AWS-OldUsers_Remaining.txt") | Where-Object {$_ -ne "Jonathan Fan"})
 #$NameList += "Hugh Jorgan", "Mike Hunt", "Phil McCracken"
 
@@ -125,13 +133,40 @@ if ($AccountsArray.Length -gt 0) {
     }
     
     if ((Read-Host -Prompt "`n`nRun exit process for these accounts (y/N)?") -eq 'y') {
-        if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchFQDN}) {
-            Write-Host -ForegroundColor 'White' "`nDetected active Exchange session..."
+        
+        if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchFQDN -and $_.State -eq "Opened"}) {
+            Write-Host -ForegroundColor 'White' "`nDetected active on-premise Exchange session..."
         } else {
-            Write-Host -ForegroundColor 'White' "`nRemote Exchange session starting..."
-            Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$ExchFQDN/powershell/") -AllowClobber -CommandName "*-RemoteMailbox" | Out-Null
-            $SessionCreated = $true
+            Write-Host -ForegroundColor 'White' "`nOn-premise Exchange session starting..."
+            Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$ExchFQDN/powershell/") -AllowClobber -CommandName "*RemoteMailbox" | Out-Null
+            $ExchSessionCreated = $true
         }
+
+        if (Get-PSSession | Where-Object {$_.ComputerName -eq "outlook.office365.com" -and $_.State -eq "Opened"}) {
+            Write-Host -ForegroundColor 'White' "`nDetected active Office 365 Exchange Online session..."
+            $O365Session = (Get-PSSession | Where-Object {$_.ComputerName -eq "outlook.office365.com" -and $_.State -eq "Opened"} | Select-Object -First 1)
+        } else {
+            # This is a check to see if the custom environment variable exists which I use for specifying an admin username for authentication
+            # If so, the custom Functions-PSStoredCredentials.ps1 should also be loaded so just grab the credentials from there
+            # If not, fall back to the standard annoying prompt...
+            # For more info, see: https://practical365.com/blog/saving-credentials-for-office-365-powershell-scripts-and-scheduled-tasks/
+            try {
+                # The two lines below should be set in the PowerShell profile:
+                #$KeyPath = "$Home\Documents\WindowsPowerShell"
+                #. "$Env:DevPath\Profile\Functions-PSStoredCredentials.ps1"
+                $O365Cred = (Get-StoredCredential -UserName ($env:UserName + "@$Domain"))
+            }
+            catch {
+                $O365Cred = (Get-Credential -Credential ($env:UserName + "@$Domain"))
+            }
+        
+            Write-Host -ForegroundColor 'White' "`nOffice 365 Exchange Online session starting..."
+            
+            $O365Session = New-PSSession -ConnectionUri https://outlook.office365.com/powershell-liveid/ `
+            -ConfigurationName Microsoft.Exchange -Credential $O365Cred -Authentication Basic -AllowRedirection
+            $O365SessionCreated = $true
+        }
+
         Start-Sleep 1    
         foreach ($Account in $AccountsArray) {
             ProcessExit $Account
@@ -142,10 +177,13 @@ if ($AccountsArray.Length -gt 0) {
     Write-Host -ForegroundColor 'Magenta' "`nNo account name matches found!"
 }
 
-if ($SessionCreated -eq $true) {
-    Write-Host -ForegroundColor 'White' "`nClosing remote Exchange session..."
+if ($ExchSessionCreated -eq $true) {
+    Write-Host -ForegroundColor 'White' "`nClosing on-premise Exchange session..."
     Get-PSSession | Where-Object {$_.ComputerName -eq $ExchFQDN} | Remove-PSSession
-    $SessionCreated = $false
+}
+if ($O365SessionCreated -eq $true) {
+    Write-Host -ForegroundColor 'White' "`nClosing Office 365 Exchange Online session..."
+    Get-PSSession | Where-Object {$_.ComputerName -eq "outlook.office365.com"} | Remove-PSSession
 }
 
 Write-Host -ForegroundColor 'White' "`nEnd of processing`n"
