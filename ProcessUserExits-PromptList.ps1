@@ -9,10 +9,9 @@
 $NameList = @()
 $AccountsArray = @()
 $NotMatched = @()
-$Domain = "nswlrs.com.au"
+$MailDomain = "nswlrs.com.au"
 $ExchFQDN = "sydawsexchange.trs.nsw"
 $OutputDir = "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding"
-# $FilePath = "" # Was trying to add the filepath to the AD object notes but have given up
 $ExchSessionCreated = $false
 $O365SessionCreated = $false
 
@@ -27,11 +26,8 @@ function ProcessMailbox ($AccountUPN) {
     if(Get-RemoteMailbox $AccountUPN -ErrorAction SilentlyContinue) {
 
         Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN -HiddenFromAddressListsEnabled $True #-WhatIf
-        Write-Host -ForegroundColor 'White' "`nSet mailbox for `'$AccountUPN`' to shared (y/N)? " -NoNewline
-
-        if ((Read-Host) -eq 'y') {
-            Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared <#-WhatIf#>}
-        }
+        Write-Host -ForegroundColor 'White' "`nSetting mailbox for `'$AccountUPN`' to shared..."
+        Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared <#-WhatIf#>}
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountUPN`' found!"
     }
@@ -51,7 +47,7 @@ function RemoveFromGroups ($AccountSAM, $Groups) {
 
     $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "`nSaving to: $FilePath"
-    $Groups | Out-File $FilePath -NoClobber #-WhatIf
+    $Groups | Out-File $FilePath -NoClobber | Out-Null #-WhatIf
 }
 
 function ProcessExit ($Account) {
@@ -74,7 +70,6 @@ function ProcessExit ($Account) {
         Write-Host -ForegroundColor 'Magenta' "`nNo group memberships found!"
     } else {
         RemoveFromGroups $AccountSAM $Groups
-        #$ProcessInfo += "`r`nPrevious group memberships: $FilePath"
     }
 
     if ($Account.Enabled -eq $True) {
@@ -90,6 +85,7 @@ function ProcessExit ($Account) {
 }
 
 Write-Host -ForegroundColor 'White' "`nStarting user exit script`n"
+
 <#
 do {
     $ReadInput = (Read-Host -Prompt "Enter usernames seperated by commas, or `'q`' to quit")
@@ -154,10 +150,10 @@ if ($AccountsArray.Length -gt 0) {
                 # The two lines below should be set in the PowerShell profile:
                 #$KeyPath = "$Home\Documents\WindowsPowerShell"
                 #. "$Env:DevPath\Profile\Functions-PSStoredCredentials.ps1"
-                $O365Cred = (Get-StoredCredential -UserName ($env:UserName + "@$Domain"))
+                $O365Cred = (Get-StoredCredential -UserName ($env:UserName + "@$MailDomain"))
             }
             catch {
-                $O365Cred = (Get-Credential -Credential ($env:UserName + "@$Domain"))
+                $O365Cred = (Get-Credential -Credential ($env:UserName + "@$MailDomain"))
             }
         
             Write-Host -ForegroundColor 'White' "`nOffice 365 Exchange Online session starting..."
