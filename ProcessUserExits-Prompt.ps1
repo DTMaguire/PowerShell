@@ -3,7 +3,8 @@
 # Still a work in progress - To Do:
 #   Extend input to allow reading of users from text and CSV files
 #   Create parameters and turn into module
-
+#Requires -PSEdition Desktop
+#Requires -Version 5.1
 #Requires -Modules ActiveDirectory
 
 $NameList = @()
