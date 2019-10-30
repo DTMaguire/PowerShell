@@ -28,8 +28,8 @@ $WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCrede
 Write-Host -ForegroundColor 'White' "Running as $env:Username with profile path: $KeyPath `n"
 
 # Change the Shell Color
-#$shell.BackgroundColor = “Gray”
-#$shell.ForegroundColor = “Black”
+#$shell.BackgroundColor = "Gray"
+#$shell.ForegroundColor = "Black"
 
 #To start with a clean Shell
 # Clear-Host
