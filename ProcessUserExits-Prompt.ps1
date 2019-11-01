@@ -3,6 +3,7 @@
 # Still a work in progress - To Do:
 #   Extend input to allow reading of users from text and CSV files
 #   Create parameters and turn into module
+#
 #Requires -PSEdition Desktop
 #Requires -Version 5.1
 #Requires -Modules ActiveDirectory
@@ -13,8 +14,26 @@ $NotMatched = @()
 $MailDomain = "externalmaildomain.com.au"
 $ExchFQDN = "internalexchange.domain.name"
 $OutputDir = "\\SomeNetworkPath\ICT\ICT Operations\User Offboarding"
+$LogTime = Get-Date -UFormat %y%m%d%H%M%S
+$LogPath = Join-Path -Path $OutputDir -ChildPath 'Logs'
+$LogName = Join-Path -Path $LogPath -ChildPath "$($LogTime).log"
 $ExchSessionCreated = $false
 $O365SessionCreated = $false
+$WinVer = [version](Get-CimInstance Win32_OperatingSystem).version
+$Shell = $Host.UI.RawUI
+$Shell.WindowTitle="User Offboarding Script"
+
+If ($WinVer -lt [version]6.2) {
+
+    # Shell variables to size window correctly for Win 7 and earlier
+    $BSize = $Shell.BufferSize
+    $BSize.Width=120
+    $Shell.BufferSize = $BSize
+
+    $WSize = $Shell.WindowSize
+    $WSize.Width=120
+    $Shell.WindowSize = $WSize
+}
 
 function GetUserAccount ($Name) {
 
@@ -22,13 +41,14 @@ function GetUserAccount ($Name) {
     Select-Object Name, SamAccountName, UserPrincipalName, Memberof, Enabled, Description, Info
 }
 
-function ProcessMailbox ($AccountUPN) {
+function ProcessMailbox ($AccountSAM, $AccountUPN) {
 
     if(Get-RemoteMailbox $AccountUPN -ErrorAction SilentlyContinue) {
-
-        Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN -HiddenFromAddressListsEnabled $True #-WhatIf
+        Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN -HiddenFromAddressListsEnabled $True -WhatIf
         Write-Host -ForegroundColor 'White' "`nSetting mailbox for `'$AccountUPN`' to shared..."
-        Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared <#-WhatIf#>}
+        Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared -WhatIf}
+        Set-ADUser $AccountSAM -Replace @{msExchRemoteRecipientType="100"; msExchRecipientTypeDetails="34359738368"} -WhatIf
+
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nNo mailbox for `'$AccountUPN`' found!"
     }
@@ -43,12 +63,12 @@ function RemoveFromGroups ($AccountSAM, $Groups) {
     foreach ($Group in $Groups) {
         Start-Sleep -Milliseconds 100
         Write-Host -ForegroundColor 'White' "Removing from:" $Group
-        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false #-WhatIf
+        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false -WhatIf
     }
 
     $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "`nSaving to: $FilePath"
-    $Groups | Out-File $FilePath -NoClobber | Out-Null #-WhatIf
+    $Groups | Out-File $FilePath -NoClobber -WhatIf
 }
 
 function ProcessExit ($Account) {
@@ -75,15 +95,20 @@ function ProcessExit ($Account) {
 
     if ($Account.Enabled -eq $True) {
         Write-Host -ForegroundColor 'White' "`nDisabling account..."
-        Disable-ADAccount -Identity $AccountSAM -Confirm:$false #-WhatIf
+        Disable-ADAccount -Identity $AccountSAM -Confirm:$false -WhatIf
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nAccount already disabled!"
     }
 
-    ProcessMailbox $Account.UserPrincipalName
+    ProcessMailbox $AccountSAM $Account.UserPrincipalName
     
-    Set-ADUser -Identity $AccountSAM -Description $Account.Description -Replace @{info="$ProcessInfo`r`n$($Account.info)"}
+    Set-ADUser -Identity $AccountSAM -Description $Account.Description -Replace @{info="$ProcessInfo`r`n$($Account.info)"} -WhatIf
 }
+
+If(!(Test-Path -Path $LogPath)){
+    New-Item -Path $LogPath -ItemType Directory
+}
+Start-Transcript -Path $LogName | Out-Null
 
 Write-Host -ForegroundColor 'White' "`nStarting user exit script`n"
 
@@ -179,3 +204,4 @@ if ($O365SessionCreated -eq $true) {
 }
 
 Write-Host -ForegroundColor 'White' "`nEnd of processing`n"
+Stop-Transcript | Out-Null
