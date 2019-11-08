@@ -11,9 +11,9 @@
 $NameList = @()
 $AccountsArray = @()
 $NotMatched = @()
-$MailDomain = "nswlrs.com.au"
-$ExchFQDN = "sydawsexchange.trs.nsw"
-$OutputDir = "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding"
+$MailDomain = "externalmaildomain.com.au"
+$ExchFQDN = "internalexchange.domain.name"
+$OutputDir = "\\SomeNetworkPath\ICT\ICT Operations\User Offboarding"
 $LogTime = Get-Date -UFormat %y%m%d%H%M%S
 $LogPath = Join-Path -Path $OutputDir -ChildPath 'Logs'
 $LogName = Join-Path -Path $LogPath -ChildPath "$($LogTime).log"
