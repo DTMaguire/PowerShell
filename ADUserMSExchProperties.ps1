@@ -1,5 +1,7 @@
-# Quick script to pull the Exchange attributes from AD users and decode them
-# Useful to compare account properties in an Office 365 Hybrid configuration
+# Script to pull the Exchange attributes from AD users and decode them via hash tables.
+# Useful to compare account properties in an AD Sync/Office 365 configuration 
+# where on-prem AD objects don't reflect the mailbox status in Office 365
+# (ie - Exchange hybrid mode is disabled but still have on-prem Exchange).
 #
 # Copyright DM Tech 2019
 
