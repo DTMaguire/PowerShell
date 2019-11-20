@@ -40,7 +40,7 @@ $Counter = $Window.FindName("Counter")
 # Generate and display the dynamically updating content
 $Window.Add_ContentRendered({
     $BootTime = ([Management.ManagementDateTimeConverter]::ToDateTime((Get-WmiObject `
-        Win32_OperatingSystem).LastBootUpTime))
+        Win32_OperatingSystem -ComputerName 'QSQ-3SCSU5-PC').LastBootUpTime))
     do {
         $UpTime = (New-TimeSpan -Start $BootTime -End (Get-Date))
         $Counter.Content = ($UpTime | Select-Object Days,Hours,Minutes,Seconds | Out-String)
