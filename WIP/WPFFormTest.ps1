@@ -20,7 +20,7 @@ Add-Type -Assembly PresentationCore
     x:Name="Window" Title="Maneesha's Uptime Counter" WindowStartupLocation="CenterScreen"
     ResizeMode="NoResize" SizeToContent="Width" Height="200">
         <Label Content="" x:Name="Counter" HorizontalAlignment="Center" VerticalAlignment="Top"
-        Foreground="Black" FontFamily="Courier New" FontSize="24" Margin="10,0,10,0"/>
+        Foreground="Black" FontFamily="Courier New" FontSize="24" Margin="16,8,20,0"/>
 </Window>
 "@
 

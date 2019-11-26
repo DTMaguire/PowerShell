@@ -2,9 +2,4 @@
 *.txt
 *.xlsx
 *.exe
-WIP/FindADUserLockouts.ps1
-WIP/NABSCP.ps1
-WIP/Get-UserLogon.psm1
-WIP/Get-Rooms.ps1
-WIP/ClearQSRoomPermissions.ps1
-WIP/ProcessUserExits-PromptList.ps1
+WIP/Archive

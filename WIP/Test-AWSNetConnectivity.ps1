@@ -1,5 +1,5 @@
 #Requires #Requires -Modules ActiveDirectory
-$AWSServers = (Get-ADComputer -Filter 'Name -like "SYDAWS*"' | Select-Object -ExpandProperty Name)
+$AWSServers = (Get-ADComputer -Filter 'Name -like "*AWS*" -and OperatingSystem -like "Windows Server*"' | Select-Object -ExpandProperty Name)
 $NetWorking = @()
 $NetNotWorking = @()
 $WSManWorking = @()
