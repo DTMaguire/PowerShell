@@ -2,8 +2,9 @@
 # Copyright DM Tech 2019
 #
 # Prerequisites:
-#   A system or user environment variable $Env:AdminUPN for the relevant domain/cloud service account
 #   A system or user environment variable $Env:DevPath with the path to your scripts directory
+#   A system or user environment variable $Env:AdminUPN for the relevant domain/cloud service account
+
 
 # Set the start location to the DevPath
 Set-Location -Path $Env:DevPath
@@ -15,6 +16,12 @@ $Env:PSModulePath += (";" + $Env:DevPath + "Modules\")
 
 # Set the $KeyPath variable to somewhere sensible as required by Functions-PSStoredCredentials.ps1 (per user)
 $KeyPath = "$Home\Documents\WindowsPowerShell"
+
+<#
+ This checks to see if the $Env:AdminUPN environment variable exists which I use for specifying an admin username for authentication
+ If so, dot-source 'Functions-PSStoredCredentials.ps1' and load the pre-existing credential file into a PowerShell credential object
+ For more info, see: https://practical365.com/blog/saving-credentials-for-office-365-powershell-scripts-and-scheduled-tasks/
+#>
 
 # Test to see if admin credentials exist
 if (Test-Path "$($KeyPath)\$($env:AdminUPN).cred") {
