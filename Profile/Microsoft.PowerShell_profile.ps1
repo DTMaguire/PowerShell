@@ -12,4 +12,4 @@
 $env:AdminUPN = ' '
 
 # Call the shared script from a common directory
-. "D:\Scripts\PowerShell\Profile\DM-PowerShell_Profile.ps1"
+. "$Env:DevPath\Profile\DM-PowerShell_Profile.ps1"
