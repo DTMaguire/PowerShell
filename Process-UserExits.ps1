@@ -1,5 +1,16 @@
 # PowerShell script to export groups for a list of old users, remove them from the groups and disable their accounts
 # Version 2.0 - Copyright DM Tech 2019
+#
+# This script will process user exits by:
+# - Export a list of group memberships to a text file
+# - Remove from all security groups and distribution lists
+# - Remove Office 365 licenses and access (via security group removal)
+# - Convert the mailbox to shared (if it exists)
+# - Prevent any further email delivery to the mailbox (if it exists)
+# - Hide user from the Outlook address book
+# - Disable and mark the AD account with "Exit processed"
+# - Write transcript of actions to a log file
+#
 # Still a work in progress - To Do:
 #   Extend input to allow reading of users from text and CSV files
 #   Create parameters and turn into module
@@ -11,17 +22,25 @@
 $NameList = @()
 $AccountsArray = @()
 $NotMatched = @()
-$MailDomain = "externalmaildomain.com.au"
-$ExchFQDN = "internalexchange.domain.name"
-$OutputDir = "\\SomeNetworkPath\ICT\ICT Operations\User Offboarding"
+$ExchFQDN = [System.Net.Dns]::GetHostByName('sydawsexchange').HostName
+$OutputDir = "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding"
 $LogTime = Get-Date -UFormat %y%m%d%H%M%S
 $LogPath = Join-Path -Path $OutputDir -ChildPath 'Logs'
 $LogName = Join-Path -Path $LogPath -ChildPath "$($LogTime).log"
 $ExchSessionCreated = $false
 $O365SessionCreated = $false
 $WinVer = [version](Get-CimInstance Win32_OperatingSystem).version
-$Shell = $Host.UI.RawUI
-$Shell.WindowTitle="User Offboarding Script"
+
+# To set the window title
+#$Shell = $Host.UI.RawUI
+#$Shell.WindowTitle="User Offboarding Script"
+
+if ($env:UserName -notlike "admin*") {
+    Write-Error "The current account `'$env:UserName`' does not appear to be a domain admin.
+Please re-run this script with your admin account (Shift-right click, Run as different user). Exiting..."
+    Start-Sleep 3
+    exit
+}
 
 If ($WinVer -lt [version]6.2) {
 
@@ -33,13 +52,6 @@ If ($WinVer -lt [version]6.2) {
     $WSize = $Shell.WindowSize
     $WSize.Width=120
     $Shell.WindowSize = $WSize
-}
-
-if ($env:UserName -notlike "admin*") {
-    Write-Host -ForegroundColor 'Red' "`nThe current account `'$env:UserName`' does not appear to be a domain admin.
-Please re-run this script with your admin account (Shift-right click, Run as different user).`nExiting...`n"
-    Start-Sleep 3
-    exit
 }
 
 function GetUserAccount ($Name) {
@@ -96,7 +108,7 @@ function ProcessExit ($Account) {
     Start-Sleep 1
 
     if ($Account.Description -match "Exit Processed") {
-        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed - continuing!"
+        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed, skipping..."
         continue
     }
 
@@ -141,9 +153,10 @@ do {
 $NameList = @(($ReadInput).Split(",").Trim())
 
 <#
-Alternatively, NameList can be set to get info from a file or even file names like so:
+    Alternatively, NameList can be set to get info from a file or even file names like so:
 $NameList = @((Get-Content -Path "D:\Scripts\Input\AWS-OldUsers_Remaining.txt") | Where-Object {$_ -ne "Jonathan Fan"})
 $NameList = @((Get-ChildItem -Path "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding" | Select-Object -ExpandProperty Name) -replace ('UserExit_','') -replace ('_Groups.txt',''))
+$NameList = @((Import-Csv -Path "D:\Scripts\Input\SR-1420_revised.csv" | Select-Object -ExpandProperty "DisplayName" | Where-Object {$_ -ne "David Ogilvy"}).Trim())
 #>
 
 Write-Host -ForegroundColor 'White' "`n`nImporting the following users:`n"
@@ -196,11 +209,11 @@ if ($AccountsArray.Length -gt 0) {
                 # The two lines below should be set in the PowerShell profile:
                 #$KeyPath = "$Home\Documents\WindowsPowerShell"
                 #. "$Env:DevPath\Profile\Functions-PSStoredCredentials.ps1"
-                $O365Cred = (Get-StoredCredential -UserName ($env:UserName + "@$MailDomain"))
+                $O365Cred = (Get-StoredCredential -UserName $Env:AdminUPN)
             }
             catch {
                 Write-Host -ForegroundColor 'Magenta' "`nAdmin credentials required..."
-                $O365Cred = (Get-Credential) #-Credential ($env:UserName + "@$MailDomain"))
+                $O365Cred = (Get-Credential)
             }
         
             Write-Host -ForegroundColor 'White' "`nOffice 365 Exchange Online session starting..."
@@ -229,5 +242,4 @@ if ($O365SessionCreated -eq $true) {
 }
 
 Write-Host -ForegroundColor 'White' "`nEnd of processing`n"
-Stop-Transcript | Out-Null
-$Shell.WindowTitle="User Offboarding Script"
+#Stop-Transcript | Out-Null

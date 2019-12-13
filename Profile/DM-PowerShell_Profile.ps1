@@ -10,7 +10,7 @@
 Set-Location -Path $Env:DevPath
 
 # Add the Modules folder in the $Env:DevPath to the PSModulePath for easy access to custom modules 
-$Env:PSModulePath += (";" + $Env:DevPath + "Modules\")
+$Env:PSModulePath += (";" + $Env:DevPath + "\Modules")
 
 #### Fancy stored credentials bit ####
 
