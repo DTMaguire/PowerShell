@@ -3,11 +3,17 @@
 
 #Requires -Modules ActiveDirectory
 
-$Filter = "Depot"
+do {
+    $Filter = Read-Host -Prompt "`nInput group string to search, or 'Q' to exit"
+    if ($Filter -eq 'q') {
+        exit
+    }
+} until ($null -ne $Filter)
+
 $FilterString = [string]::Format('*{0}*', $Filter)
 $OutputPath = "D:\Scripts\Output\Export Groups\"
 $OutputCSV = Join-Path -Path $OutputPath -ChildPath "$($Filter)UserMembership.csv"
-$UserArray = @()
+$UserArray = [System.Collections.ArrayList]::new()
 
 if (Test-Path $OutputCSV) {
     Write-Warning "Output file already exists at $OutputCSV"
@@ -24,6 +30,8 @@ Start-Sleep 1
 $Groups = (Get-ADGroup -Filter {Name -like $FilterString} -Properties * | Where-Object {$_.GroupCategory -like "Security"} | `
     Sort-Object -Property SamAccountName | Select-Object SamAccountName, Description, Members)
 $GroupsTotal = $Groups.Count
+Write-Host $GroupsTotal
+Start-Sleep 2
 $CurGroup = 0
 
 ForEach ($Group in $Groups) {
@@ -62,18 +70,20 @@ ForEach ($Group in $Groups) {
                 Continue
             }
 
-            if (($UserArray.SamAccountName) -contains $MemberSAM) {
+            if ($UserArray.Contains($MemberSAM)) {
                     $NotUnique++
             } else {
                 Write-Host -ForegroundColor 'White' "$MemberSAM"
-                $UserObject = (Get-ADUser -Identity $MemberSAM -Properties *)
-                $UserAttributes = ($UserObject | `
-                    Select-Object Name, SamAccountName, Description, Enabled, WhenCreated, LastLogonDate, AccountExpirationDate)
-                $FilterGroupMembership = ($UserObject | Select-Object -ExpandProperty MemberOf | `
-                    Where-Object {$_ -match "$Filter"} | Get-ADGroup | Select-Object -ExpandProperty SamAccountName)
-                $UserArray += ($UserAttributes | `
-                    Select-Object *, @{label='FilteredGroups'; expression={$FilterGroupMembership -join '; '}})
-            }
+                if ((Get-ADObject -Filter 'Name -like "$MemberSAM"').ObjectClass -eq 'user') {
+                    $UserObject = (Get-ADUser -Identity $MemberSAM -Properties *)
+                    $UserAttributes = ($UserObject | `
+                        Select-Object Name, SamAccountName, Description, Enabled, WhenCreated, LastLogonDate, AccountExpirationDate)
+                    $FilterGroupMembership = ($UserObject | Select-Object -ExpandProperty MemberOf | `
+                        Where-Object {$_ -match "$Filter"} | Get-ADGroup | Select-Object -ExpandProperty SamAccountName)
+                    $UserArray.Add(($UserAttributes | `
+                        Select-Object *, @{label='FilteredGroups'; expression={$FilterGroupMembership -join '; '}}))
+                }
+            }                                     
         }
         Write-Host -ForegroundColor 'Magenta' "`nMembers already matched:" $NotUnique
         Write-Host -ForegroundColor 'Cyan' "Current unique members: " $UserArray.Count

@@ -32,8 +32,7 @@ $O365SessionCreated = $false
 $WinVer = [version](Get-CimInstance Win32_OperatingSystem).version
 
 # To set the window title
-#$Shell = $Host.UI.RawUI
-#$Shell.WindowTitle="User Offboarding Script"
+#$Host.UI.RawUI.WindowTitle = "User Offboarding Script"
 
 if ($env:UserName -notlike "admin*") {
     Write-Error "The current account `'$env:UserName`' does not appear to be a domain admin.
@@ -45,13 +44,11 @@ Please re-run this script with your admin account (Shift-right click, Run as dif
 If ($WinVer -lt [version]6.2) {
 
     # Shell variables to size window correctly for Win 7 and earlier
-    $BSize = $Shell.BufferSize
-    $BSize.Width=120
-    $Shell.BufferSize = $BSize
-
-    $WSize = $Shell.WindowSize
-    $WSize.Width=120
-    $Shell.WindowSize = $WSize
+    if ($Shell.BufferSize.Width -lt 120) {
+        
+    $Shell.BufferSize.With = 120
+    $Shell.WindowSize.Width = $Shell.BufferSize.Width
+    }
 }
 
 function GetUserAccount ($Name) {
@@ -65,16 +62,16 @@ function ProcessMailbox ($Account) {
     $AccountUPN = $Account.UserPrincipalName
     if(Get-RemoteMailbox $AccountUPN -ErrorAction SilentlyContinue) {
 
-        Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN -HiddenFromAddressListsEnabled $True #-WhatIf
+        Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN -HiddenFromAddressListsEnabled $True -WhatIf
         Write-Host -ForegroundColor 'White' "`nSetting mailbox for `'$($Account.UserPrincipalName)`' to shared..."
-        Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared <#-WhatIf#>}
+        Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared -WhatIf}
 
         if ($Account.msExchRemoteRecipientType -eq 1) {
             Write-Host -ForegroundColor 'White' "`nUpdating local AD recipient type value from `'1`' to `'97`'"
-            Set-ADUser $Account.SamAccountName -Replace @{msExchRemoteRecipientType="97"; msExchRecipientTypeDetails="34359738368"} #-WhatIf
+            Set-ADUser $Account.SamAccountName -Replace @{msExchRemoteRecipientType="97"; msExchRecipientTypeDetails="34359738368"} -WhatIf
         } elseif ($Account.msExchRemoteRecipientType -eq 4) {
             Write-Host -ForegroundColor 'White' "`nUpdating local AD recipient type value from `'4`' to `'100`'"
-            Set-ADUser $Account.SamAccountName -Replace @{msExchRemoteRecipientType="100"; msExchRecipientTypeDetails="34359738368"} #-WhatIf
+            Set-ADUser $Account.SamAccountName -Replace @{msExchRemoteRecipientType="100"; msExchRecipientTypeDetails="34359738368"} -WhatIf
         } else {
             Write-Host -ForegroundColor 'Magenta' "`nValue: `'$($Account.msExchRemoteRecipientType)' not valid for recipient type, skipping update..."
             continue
@@ -94,12 +91,12 @@ function RemoveFromGroups ($AccountSAM, $Groups) {
     foreach ($Group in $Groups) {
         Start-Sleep -Milliseconds 100
         Write-Host -ForegroundColor 'White' "Removing from:" $Group
-        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false #-WhatIf
+        Remove-ADGroupMember -Identity $Group -Member $AccountSAM -Confirm:$false -WhatIf
     }
 
     $FilePath = Join-Path -Path $OutputDir -ChildPath "UserExit_$($AccountSAM)_Groups.txt"
     Write-Host -ForegroundColor 'Green' "`nSaving to: $FilePath"
-    $Groups | Out-File $FilePath -NoClobber #-WhatIf
+    $Groups | Out-File $FilePath -NoClobber -WhatIf
 }
 
 function ProcessExit ($Account) {
@@ -126,14 +123,14 @@ function ProcessExit ($Account) {
 
     if ($Account.Enabled -eq $True) {
         Write-Host -ForegroundColor 'White' "`nDisabling account..."
-        Disable-ADAccount -Identity $AccountSAM -Confirm:$false #-WhatIf
+        Disable-ADAccount -Identity $AccountSAM -Confirm:$false -WhatIf
     } else {
         Write-Host -ForegroundColor 'Magenta' "`nAccount already disabled!"
     }
 
     ProcessMailbox $Account
     
-    Set-ADUser -Identity $AccountSAM -Description $Account.Description -Replace @{info="$ProcessInfo`r`n$($Account.info)"} #-WhatIf
+    Set-ADUser -Identity $AccountSAM -Description $Account.Description -Replace @{info="$ProcessInfo`r`n$($Account.info)"} -WhatIf
 }
 
 If(!(Test-Path -Path $LogPath)){
@@ -156,9 +153,9 @@ $NameList = @(($ReadInput).Split(",").Trim())
     Alternatively, NameList can be set to get info from a file or even file names like so:
 $NameList = @((Get-Content -Path "D:\Scripts\Input\AWS-OldUsers_Remaining.txt") | Where-Object {$_ -ne "Jonathan Fan"})
 $NameList = @((Get-ChildItem -Path "\\NAS-QS-TRS\Groups\Corp_Services\ICT\ICT Operations\User Offboarding" | Select-Object -ExpandProperty Name) -replace ('UserExit_','') -replace ('_Groups.txt',''))
+
 $NameList = @((Import-Csv -Path "D:\Scripts\Input\SR-1420_revised.csv" | Select-Object -ExpandProperty "DisplayName" | Where-Object {$_ -ne "David Ogilvy"}).Trim())
 #>
-
 Write-Host -ForegroundColor 'White' "`n`nImporting the following users:`n"
 Write-Output $NameList
 Write-Host -ForegroundColor 'Green' "`n`nTotal names imported: " $NameList.Count "`n"
@@ -242,4 +239,4 @@ if ($O365SessionCreated -eq $true) {
 }
 
 Write-Host -ForegroundColor 'White' "`nEnd of processing`n"
-#Stop-Transcript | Out-Null
+Stop-Transcript | Out-Null
