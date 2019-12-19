@@ -126,7 +126,7 @@ if ([string]::IsNullOrWhiteSpace($SetDevPath)) {
     $Script:SetDevPath = 'C:\Scripts\PowerShell'
 }
 
-if ((Test-Path -Path $SetDevPath) -eq $false) {
+if (!(Test-Path -Path $SetDevPath)) {
     New-Item -ItemType 'Directory' -Path $SetDevPath -Force
 }
 
