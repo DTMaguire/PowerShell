@@ -162,16 +162,13 @@ $ProfilePath = "$SetDevPath\Profile"
 if (!(Test-Path -Path $ProfilePath)) {
     New-Item -ItemType 'Directory' -Name 'Profile' -Force
 }
-Set-Location $ProfilePath
 
-$PSCommonPath = $ProfilePath + '\Microsoft.PowerShell_profile.ps1'
+$PSCommonPath = "$ProfilePath\Microsoft.PowerShell_profile.ps1"
 
-if ((Test-Path -Path $PSCommonPath -PathType Leaf) -eq $false) {
-    New-Item -ItemType File $PSCommonPath -Value $PSCommonTemplate
-    Add-Content -Path $PSCommonPath -Value '$env:AdminUPN = ' -NoNewline
-    Add-Content -Path $PSCommonPath -Value "`'$AdminUPN`'"e
-    Add-Content -Path $PSCommonPath -Value $PSCommonTemplateAppend
-}
+New-Item -ItemType File $PSCommonPath -Value $PSCommonTemplate -Force
+Add-Content -Path $PSCommonPath -Value '$env:AdminUPN = ' -NoNewline
+Add-Content -Path $PSCommonPath -Value "`'$AdminUPN`'"
+Add-Content -Path $PSCommonPath -Value $PSCommonTemplateAppend
 
 if ((Test-Path -Path "$ProfilePath\Shared-PowerShell_Profile.ps1" -PathType Leaf) -eq $false) {
     New-Item -ItemType File "$ProfilePath\Shared-PowerShell_Profile.ps1" -Value $PSSharedTemplate    
@@ -197,7 +194,7 @@ foreach ($Destination in $ProfileDestinations) {
     if (!(Test-Path -Path $Destination)) {
         New-Item -ItemType Directory -Force -Path $Destination
     }
-    Copy-Item $PSCommonPath -Destination $Destination
+    Copy-Item $PSCommonPath -Destination $Destination -Force
 }
 
 Write-Host "`nFinished copying common profile files."
@@ -218,6 +215,7 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
         } 
     } 
 
+    Set-Location $ProfilePath
     $StoredFunctionURL = 'https://github.com/cunninghamp/PowerShell-Stored-Credentials/archive/v1.0.0.zip'
     $ZipFile = 'PowerShell-Stored-Credentials-1.0.0.zip'
     $WebClient = New-Object System.Net.WebClient
