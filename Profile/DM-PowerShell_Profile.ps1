@@ -7,10 +7,10 @@
 
 
 # Set the start location to the DevPath
-Set-Location -Path $Env:DevPath
+Set-Location -Path "$Env:DevPath"
 
 # Add the Modules folder in the $Env:DevPath to the PSModulePath for easy access to custom modules 
-$Env:PSModulePath += (';' + $Env:DevPath + '\Modules')
+$Env:PSModulePath += (';' + "$Env:DevPath" + '\Modules')
 
 #### Fancy stored credentials bit ####
 
@@ -18,10 +18,10 @@ $Env:PSModulePath += (';' + $Env:DevPath + '\Modules')
 $KeyPath = "$Home\Documents\PowerShell"
 
 <#
- This checks if the $Env:AdminUPN environment variable exists for specifying an admin username for authentication
- If so, dot-source 'Functions-PSStoredCredentials.ps1' and load the .cred file into a PowerShell credential object
- For more info, see: 
- https://practical365.com/blog/saving-credentials-for-office-365-powershell-scripts-and-scheduled-tasks/
+    This checks if the $Env:AdminUPN environment variable exists for specifying an admin username for authentication
+    If so, dot-source 'Functions-PSStoredCredentials.ps1' and load the .cred file into a PowerShell credential object
+    For more info, see: 
+    https://practical365.com/blog/saving-credentials-for-office-365-powershell-scripts-and-scheduled-tasks/
 #>
 
 # Test to see if admin credentials exist
@@ -35,6 +35,10 @@ if (Test-Path "${KeyPath}\${env:AdminUPN}.cred") {
 }
 
 #### End fancy stored credentials ####
+
+# Proxy settings to allow access to web/remote stuff like Office 365 and the PowerShell Gallery
+$WebClient = New-Object System.Net.WebClient
+$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
 
 if ([version](Get-CimInstance Win32_OperatingSystem).version -lt [version]6.2) {
     
@@ -51,19 +55,17 @@ if ([version](Get-CimInstance Win32_OperatingSystem).version -lt [version]6.2) {
     $WSize.Width=120
     $WSize.Height=40
     $Shell.WindowSize = $WSize
-}
 
-# Proxy settings to allow access to web/remote stuff like Office 365 and the PowerShell Gallery
-$WebClient = New-Object System.Net.WebClient
-$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+} else {
+
+    # Assume Windows 10 and add the Chocolately profile
+    $ChocolateyProfile = "$Env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+
+    if (Test-Path($ChocolateyProfile)) {
+        Import-Module "$ChocolateyProfile"
+    }
+}
 
 # Show a custom message
 Write-Host -ForegroundColor 'White' `
 "Running as $Env:Username with profile path: $KeyPath `nDomain admin credentials loaded:" $([bool]$AdminCredential)"`n"
-
-# To change the Shell Color
-#$shell.BackgroundColor = "Gray"
-#$shell.ForegroundColor = "Black"
-
-# To start with a clean Shell
-# Clear-Host
