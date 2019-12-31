@@ -126,7 +126,7 @@ function Start-UserExitProcess {
     param (
         [Parameter(Mandatory,ValueFromPipeline,Position=0)]
         [Alias("User")]
-        [string]$Identity,
+        [string[]]$Identity,
 
         [Parameter(Position=1)]
         [ValidateScript({
@@ -200,7 +200,7 @@ function Start-UserExitProcess {
 
         if ((Read-Host -Prompt "`n`nRun exit process for these accounts (y/N)?") -eq 'y') {
 
-            if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchangeFQDN -and $_.State -eq "Opened"}) {
+            if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchangeFQDN -and $_.State -eq 'Opened'}) {
                 Write-Host -ForegroundColor 'White' "`nDetected active on-premise Exchange session..."
             } else {
                 Write-Host -ForegroundColor 'White' "`nOn-premise Exchange session starting..."
@@ -209,10 +209,10 @@ function Start-UserExitProcess {
                 $Script:ExchSessionCreated = $true
             }
 
-            if (Get-PSSession | Where-Object {$_.ComputerName -eq "outlook.office365.com" -and $_.State -eq "Opened"}) {
+            if (Get-PSSession | Where-Object {$_.ComputerName -eq 'outlook.office365.com' -and $_.State -eq 'Opened'}) {
                 Write-Host -ForegroundColor 'White' "`nDetected active Office 365 Exchange Online session..."
                 $Script:O365Session = (Get-PSSession | Where-Object `
-                    {$_.ComputerName -eq "outlook.office365.com" -and $_.State -eq "Opened"} | Select-Object -First 1)
+                    {$_.ComputerName -eq 'outlook.office365.com' -and $_.State -eq 'Opened'} | Select-Object -First 1)
             } else {
                 # This is a check to see if the environment variable for specifying an admin username exists.
                 # If so, call Functions-PSStoredCredentials.ps1 and attempt to grab the stored credentials.
@@ -250,7 +250,7 @@ function Start-UserExitProcess {
     }
     if ($O365SessionCreated -eq $true) {
         Write-Host -ForegroundColor 'White' "`nClosing Office 365 Exchange Online session..."
-        Get-PSSession | Where-Object {$_.ComputerName -eq "outlook.office365.com"} | Remove-PSSession
+        Get-PSSession | Where-Object {$_.ComputerName -eq 'outlook.office365.com'} | Remove-PSSession
     }
 
     Write-Host -ForegroundColor 'White' "`nEnd of processing`n"
