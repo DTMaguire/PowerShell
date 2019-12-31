@@ -17,7 +17,7 @@
 # The simple fix is to move it to another folder outside of your profile or another drive as described above!
 
 # Global variables
-$ToolsPath = "D:\AdminTools"
+$ToolsPath = (Split-Path $Env:DevPath -Parent) + '\AdminTools'
 
 # Check OS Version to size form correctly
 $WinVer = [version](Get-CimInstance Win32_OperatingSystem).version
