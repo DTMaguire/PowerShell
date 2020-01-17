@@ -1,20 +1,28 @@
 ﻿# PowerShell GUI form to launch Remote Server Admin Tools (RSAT) running with Domain Admin credentials 
 # Version 1.2 - Copyright DM Tech 2019
 # 
-# This script was designed to enable a one-click launching of tools to manage servers from a workstation logged in with a standard user account
+# This script enables a one-click launching of server admin tools from a workstation with standard domain user account
 # It works by looking for shortcuts (.lnk files) in the current directory and generating a list of buttons on a form
+# The form itself runs under domain admin credentials - the subsequent shortcuts then run in the same security context
 #
-# Usage: Copy regularly used links of Administrative Tools to a specified directory such as 'D:\AdminTools' and update the '$ToolsPath' variable
+# Usage: Copy regularly used links of Administrative Tools to a specified directory and update $ToolsPath below
 #
-# Assuming the path to this script is 'D:\Scripts\PowerShell\PSAdminTools.ps1' create a shortcut somewhere handy with the target:
-#   C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File D:\Scripts\PowerShell\PSAdminTools.ps1"
+# Check the %DEVPATH% environment variable exists and create a shortcut somewhere with the target (one line):
 #
-# Open the shortcut (not the ps1 file), enter your password once and you'll be set
+#    C:\Windows\System32\runas.exe /user:DOMAIN\ADAdminAccount <--Replace with your Domain Admin--<
+#    /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"
 #
-# Shortcuts can be added and removed from the directory as desired, although the recommended maximum is 15 for a 1080p display
+# Open the shortcut (not the ps1 file), enter your password once to save it in the Windows Credential Vault
 #
-# *** On further testing, it looks like the launch method doesn't work if the script or files are located inside a user profile due to some Windows security feature
-# The simple fix is to move it to another folder outside of your profile or another drive as described above!
+# Shortcuts can be added and removed from the $ToolsPath directory as required, but keep in mind your display height
+#
+# The launch method doesn't work if the script or shortcuts are inside a user profile due to a Windows security feature
+# The simple fix is to move it to another folder outside of your profile or another drive
+#
+# A quick way to install the RSAT on Windows 10 is to run the script here: 
+#   https://gallery.technet.microsoft.com/Install-RSAT-for-Windows-75f5f92f
+#
+# Download and run it in an elevated PowerShell like this:> .\Install-RSATv1809v1903v1909.ps1 -All 
 
 # Global variables
 $ToolsPath = (Split-Path $Env:DevPath -Parent) + '\AdminTools'
