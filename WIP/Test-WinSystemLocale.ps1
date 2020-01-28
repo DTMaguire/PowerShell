@@ -5,9 +5,10 @@
 using namespace System.Collections.Generic
 
 $OutCSV = (Split-Path $Env:DevPath -Parent) + '\Output\ServerLocales.csv'
+$OfflineCSV = (Split-Path $Env:DevPath -Parent) + '\Output\ServersOffline.csv'
 $ServerList = (Get-ADComputer -Filter 'OperatingSystem -like "Windows Server*"' | Select-Object -ExpandProperty Name)
-$NetNotWorking = [List[string]]::new()
-$LocaleNotWorking = [List[string]]::new()
+$NetNotWorking = [List[hashtable]]::new()
+$WSManNotWorking = [List[hashtable]]::new()
 $LocaleList = [List[PSObject]]::new()
 
 foreach ($Server in $ServerList) {
@@ -17,8 +18,13 @@ foreach ($Server in $ServerList) {
 
     if (Test-Connection -ComputerName $Server -Count 1 -ErrorAction SilentlyContinue) {
         try {
+            #Test-WSMan -ComputerName $Server | Out-Null
+            $Run = ([System.Globalization.CultureInfo]([int]("0x" + (Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Server -AsJob).locale)))
+            }
+            $Run | Wait-Job -Timeout 5
 
-            $ServerLocale = [System.Globalization.CultureInfo]([int]("0x" + (Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $Server).locale))
+            
+            $Run | Where-Object {$_.State -ne "Completed"} | Stop-Job
         
             $ObjectProperties = [Ordered]@{
                 HostName = $Server
@@ -28,14 +34,14 @@ foreach ($Server in $ServerList) {
             }
 
             $LocaleList.Add([PSCustomObject]$ObjectProperties)
-
+        
         } catch {
 
-            $LocaleNotWorking.Add($Server)
+            $WSManNotWorking.Add(@{Name='Hostname'; Expression={$Server}},@{Name='Status'; Expression={'Host online but unable to retrieve WMI Object'}})
         }
     } else {
 
-        $NetNotWorking.Add($Server)
+        $NetNotWorking.Add(@{Name='Hostname'; Expression={$Server}},@{Name='Status'; Expression={'Host offline or not responding'}})
     }
 }
 
@@ -43,9 +49,16 @@ Write-Host -ForegroundColor 'Green' "`nLocale retrieved for: $($LocaleList.Count
 $LocaleList | Export-Csv -NoTypeInformation $OutCSV
 Invoke-Item $OutCSV
 
-Write-Host -ForegroundColor 'Red' "`nLocale NOT retrieved for: $($LocaleNotWorking.Count)"
-Write-Output $LocaleNotWorking
+Write-Host -ForegroundColor 'Red' "`nLocale NOT retrieved for: $($WSManNotWorking.Count)"
+$WSManNotWorking | Export-Csv -NoTypeInformation $OfflineCSV
+Write-Output $WSManNotWorking
 
 Write-Host -ForegroundColor 'Red' "`nServers offline: $($NetNotWorking.Count)"
+$NetNotWorking | Export-Csv -NoTypeInformation $OfflineCSV -Append
 Write-Output $NetNotWorking
+Invoke-Item $OfflineCSV
 Write-Host "`n"
+
+$NetNotWorking.Clear()
+$WSManNotWorking.Clear()
+$LocaleList.Clear()

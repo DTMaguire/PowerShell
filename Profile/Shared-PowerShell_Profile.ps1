@@ -37,8 +37,8 @@ if (Test-Path "${KeyPath}\${env:AdminUPN}.cred") {
 #### End fancy stored credentials ####
 
 # Proxy settings to allow access to web/remote stuff like Office 365 and the PowerShell Gallery
-$WebClient = New-Object System.Net.WebClient
-$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+#$WebClient = New-Object System.Net.WebClient
+#$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
 
 if ([version](Get-CimInstance Win32_OperatingSystem).version -lt [version]6.2) {
     

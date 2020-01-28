@@ -2,6 +2,7 @@
 # Version 1.0 - Copyright DM Tech 2019
 
 #Requires -Modules ActiveDirectory
+using namespace System.Collections.Generic
 
 do {
     $Filter = Read-Host -Prompt "`nInput group string to search, or 'Q' to exit"
@@ -11,9 +12,10 @@ do {
 } until ($null -ne $Filter)
 
 $FilterString = [string]::Format('*{0}*', $Filter)
-$OutputPath = "D:\Scripts\Output\Export Groups\"
-$OutputCSV = Join-Path -Path $OutputPath -ChildPath "$($Filter)UserMembership.csv"
-$UserArray = [System.Collections.ArrayList]::new()
+$OutputPath = (Split-Path $Env:DevPath -Parent) + '\Output\Export Groups\'
+$OutputCSV = Join-Path -Path $OutputPath -ChildPath "${Filter}UserMembership.csv"
+$UserArray = [List[psobject]]::new()
+$UserProps = ('Name','SamAccountName','Description','Enabled','WhenCreated','LastLogonDate','AccountExpirationDate',@{label='FilteredGroups'; expression={$FilterGroupMembership -join ';'}})
 
 if (Test-Path $OutputCSV) {
     Write-Warning "Output file already exists at $OutputCSV"
@@ -24,7 +26,7 @@ if (Test-Path $OutputCSV) {
     }
 }
 
-Write-Host -ForegroundColor 'White' "`nFiltering groups matching: `'$Filter`'"
+Write-Host -ForegroundColor 'White' "`nFiltering groups matching: `'$Filter`'`n "
 Start-Sleep 1
 
 $Groups = (Get-ADGroup -Filter {Name -like $FilterString} -Properties * | Where-Object {$_.GroupCategory -like "Security"} | `
@@ -72,18 +74,14 @@ ForEach ($Group in $Groups) {
 
             if ($UserArray.Contains($MemberSAM)) {
                     $NotUnique++
-            } else {
+            } elseif ($Member.ObjectClass -eq 'user') {
                 Write-Host -ForegroundColor 'White' "$MemberSAM"
-                if ((Get-ADObject -Filter 'Name -like "$MemberSAM"').ObjectClass -eq 'user') {
-                    $UserObject = (Get-ADUser -Identity $MemberSAM -Properties *)
-                    $UserAttributes = ($UserObject | `
-                        Select-Object Name, SamAccountName, Description, Enabled, WhenCreated, LastLogonDate, AccountExpirationDate)
-                    $FilterGroupMembership = ($UserObject | Select-Object -ExpandProperty MemberOf | `
-                        Where-Object {$_ -match "$Filter"} | Get-ADGroup | Select-Object -ExpandProperty SamAccountName)
-                    $UserArray.Add(($UserAttributes | `
-                        Select-Object *, @{label='FilteredGroups'; expression={$FilterGroupMembership -join '; '}}))
-                }
-            }                                     
+                $UserObject = (Get-ADUser -Identity $MemberSAM -Properties *)
+                $FilterGroupMembership = ($UserObject | Select-Object -ExpandProperty MemberOf | `
+                    Where-Object {$_ -match "$Filter"} | Get-ADGroup | Select-Object -ExpandProperty SamAccountName)
+                $UserAttributes = ($UserObject | Select-Object $UserProps)
+                $UserArray.Add($UserAttributes)
+            }                               
         }
         Write-Host -ForegroundColor 'Magenta' "`nMembers already matched:" $NotUnique
         Write-Host -ForegroundColor 'Cyan' "Current unique members: " $UserArray.Count
@@ -91,9 +89,11 @@ ForEach ($Group in $Groups) {
 }
 
 $UserArray | Sort-Object SamAccountName | Format-Table Name, SamAccountName, FilteredGroups
-Write-Host -ForegroundColor 'White' "Total of unique $Filter group members: $($UserArray.Count)`n"
+Write-Host -ForegroundColor 'White' "Total of unique $Filter group members: ${UserArray.Count}`n"
 
 if ($UserArray.Count -ge 1) {
     $UserArray | Export-Csv -NoTypeInformation -Path $OutputCSV
     Write-Host -ForegroundColor 'Green' "Output file saved as: $OutputCSV`n"   
 }
+
+$UserArray.Clear()
