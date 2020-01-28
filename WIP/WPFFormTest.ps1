@@ -9,8 +9,8 @@ Add-Type -Name Window -Namespace Console -MemberDefinition '
     public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'
 [Console.Window]::ShowWindow([Console.Window]::GetConsoleWindow(), 0)
 
-Add-Type -Assembly PresentationFramework            
-Add-Type -Assembly PresentationCore
+Add-Type -AssemblyName PresentationFramework            
+Add-Type -AssemblyName PresentationCore
 
 # Define the elements of the form
 [xml]$Xaml = @"
@@ -36,11 +36,11 @@ $Window.add_Closing({
 })
 
 $Counter = $Window.FindName("Counter")
-
 # Generate and display the dynamically updating content
 $Window.Add_ContentRendered({
+    # QSQ-3SCSU5-PC QSQ-3STSG5-LT
     $BootTime = ([Management.ManagementDateTimeConverter]::ToDateTime((Get-WmiObject `
-        Win32_OperatingSystem -ComputerName 'QSQ-3SCSU5-PC').LastBootUpTime))
+        Win32_OperatingSystem -ComputerName 'QSQ-3STSG5-LT').LastBootUpTime))
     do {
         $UpTime = (New-TimeSpan -Start $BootTime -End (Get-Date))
         $Counter.Content = ($UpTime | Select-Object Days,Hours,Minutes,Seconds | Out-String)

@@ -82,7 +82,7 @@ Function GenerateForm {
     $Form = New-Object System.Windows.Forms.Form
     $Form.Text = "PSAdminTools"
     $Form.Size = New-Object System.Drawing.Size($FormWidth,$FormHeight)
-    $Form.Topmost = $True   # Sets to always on top
+    $Form.Topmost = $False   # Sets to always on top
     $Form.FormBorderStyle = 'Fixed3D'
     $Form.MaximizeBox = $False
 
@@ -101,7 +101,7 @@ Function GenerateForm {
             $Button = New-Object System.Windows.Forms.Button
             $Button.Location = New-Object System.Drawing.Size($ButtonXPos,$ButtonYPos)
             $Button.Size = New-Object System.Drawing.Size($ButtonWidth,$ButtonHeight)
-            $Button.Text = $Tool.Name -replace (".lnk","")
+            $Button.Text = $Tool.Name -replace ('.lnk','')
             $LaunchTool = [System.Management.Automation.ScriptBlock]::Create("Invoke-Item '$($Tool.FullName)'")
             $Button.Add_Click($LaunchTool)
             $Form.Controls.Add($Button)
