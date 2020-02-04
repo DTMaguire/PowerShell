@@ -1,10 +1,9 @@
 # Common profile script to be called by the default Microsoft.PowerShell_profile.ps1
-# Copyright DM Tech 2019
+# Copyright DM Tech 2020
 #
 # Prerequisites:
 #   A system or user environment variable $Env:DevPath with the path to your scripts directory
 #   A system or user environment variable $Env:AdminUPN for the relevant domain/cloud service account
-
 
 # Set the start location to the DevPath
 Set-Location -Path "$Env:DevPath"
@@ -40,30 +39,11 @@ if (Test-Path "${KeyPath}\${env:AdminUPN}.cred") {
 #$WebClient = New-Object System.Net.WebClient
 #$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
 
-if ([version](Get-CimInstance Win32_OperatingSystem).version -lt [version]6.2) {
-    
-    # Shell variables to set window and buffer if Windows 7
-    $Shell = $Host.UI.RawUI
-    #$Shell.WindowTitle=""
+# Assume Windows 10 and add the Chocolately profile
+$ChocolateyProfile = "$Env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
 
-    $BSize = $Shell.BufferSize
-    $BSize.Width=120
-    $BSize.Height=3000
-    $Shell.BufferSize = $BSize
-
-    $WSize = $Shell.WindowSize
-    $WSize.Width=120
-    $WSize.Height=40
-    $Shell.WindowSize = $WSize
-
-} else {
-
-    # Assume Windows 10 and add the Chocolately profile
-    $ChocolateyProfile = "$Env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-
-    if (Test-Path($ChocolateyProfile)) {
-        Import-Module "$ChocolateyProfile"
-    }
+if (Test-Path($ChocolateyProfile)) {
+    Import-Module "$ChocolateyProfile"
 }
 
 # Show a custom message
