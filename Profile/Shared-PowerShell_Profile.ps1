@@ -14,7 +14,7 @@ $Env:PSModulePath += (';' + "$Env:DevPath" + '\Modules')
 #### Fancy stored credentials bit ####
 
 # Set the $KeyPath variable to somewhere sensible as required by Functions-PSStoredCredentials.ps1 (per user)
-$KeyPath = "$Home\Documents\PowerShell"
+$KeyPath = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name 'Personal') + '\PowerShell'
 
 <#
     This checks if the $Env:AdminUPN environment variable exists for specifying an admin username for authentication
