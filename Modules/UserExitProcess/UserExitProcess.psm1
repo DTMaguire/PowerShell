@@ -6,7 +6,7 @@
 # - Remove from all security groups and distribution lists
 # - Remove Office 365 licenses and access (via security group removal)
 # - Convert the mailbox to shared (if it exists)
-# - Prevent any further email delivery to the mailbox (if it exists)
+# - Optionally, prevent any further email delivery to the mailbox (if it exists)
 # - Hide user from the Outlook address book
 # - Disable and mark the AD account with "Exit processed"
 # - Write transcript of actions to a log file
@@ -16,16 +16,6 @@ $AccountsArray = [List[PSObject]]::new()
 $NotMatched = [List[PSObject]]::new()
 $ExchSessionCreated = $false
 $O365SessionCreated = $false
-
-$WinVer = [version](Get-CimInstance Win32_OperatingSystem).version
-
-If ($WinVer -lt [version]6.2) {
-    # Shell variables to size window correctly for Win 7 and earlier
-    if ($Shell.BufferSize.Width -lt 120) {
-        $Shell.BufferSize.Width = 120
-        $Shell.WindowSize.Width = $Shell.BufferSize.Width
-    }
-}
 
 function Get-ADAccountInfo {
     [CmdletBinding()]
@@ -43,9 +33,12 @@ function ProcessMailbox ($Account) {
     $AccountUPN = $Account.UserPrincipalName
     if(Get-RemoteMailbox $AccountUPN -ErrorAction SilentlyContinue) {
 
-        Set-RemoteMailbox -Identity $AccountUPN -AcceptMessagesOnlyFrom $AccountUPN `
-            -HiddenFromAddressListsEnabled $True -WhatIf:$WhatIf
-        Write-Host -ForegroundColor 'White' "`nSetting mailbox for `'$($Account.UserPrincipalName)`' to shared..."
+        Write-Host -ForegroundColor 'White' "`nHiding `'$($Account.UserPrincipalName)`' from address lists..."
+        Set-RemoteMailbox -Identity $AccountUPN -HiddenFromAddressListsEnabled $True `
+            # Uncomment this to prevent email delivery: -AcceptMessagesOnlyFrom $AccountUPN `
+            -WhatIf:$WhatIf
+        
+        Write-Host -ForegroundColor 'White' "`nSetting mailbox `'$($Account.UserPrincipalName)`' to shared..."
         Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN `
             -Type Shared -WhatIf:$Using:WhatIf}
 
@@ -164,20 +157,35 @@ function Start-UserExitProcess {
     Start-Transcript -Path $LogName -WhatIf:$NoLog
 
     Write-Host -ForegroundColor 'White' "`nStarting user exit script`n"
-  
+
     Write-Host -ForegroundColor 'White' "`n`nImporting the following identities:`n"
     Write-Output $Identity
 
     Write-Host -ForegroundColor 'Green' "`n`nTotal identities imported: " $Identity.Count "`n"
 
     foreach ($Name in $Identity) {
+
         $AccountLookup = (Get-ADAccountInfo $Name)
         if ($null -ne $AccountLookup) {
+
             # Foreach loop to deal with multiple return values
-            foreach ($Object in $AccountLookup) {
-                [void]$AccountsArray.Add($Object)
+            foreach ($UserObject in $AccountLookup) {
+
+                # Do another lookup to include related Admin and Comms accounts
+                $AdminLookup = Get-ADAccountInfo *$(${UserObject}.SamAccountName)
+
+                foreach ($AdminObject in $AdminLookup) {
+                    # If array is empty or does not contain the user object, add it
+                    if ($AccountsArray.Count -lt 1) {
+                        [void]$AccountsArray.Add($AdminObject)
+                        
+                    } elseif (!($AccountsArray.SamAccountName.Contains($AdminObject.SamAccountName))) {
+                        [void]$AccountsArray.Add($AdminObject)
+                    }
+                }
             }
         } else {
+            # If the name is not found, record it and notify 
             [void]$NotMatched.Add($Name)
         }
     }
@@ -214,23 +222,22 @@ function Start-UserExitProcess {
                 $Script:O365Session = (Get-PSSession | Where-Object `
                     {$_.ComputerName -eq 'outlook.office365.com' -and $_.State -eq 'Opened'} | Select-Object -First 1)
             } else {
-                # This is a check to see if the environment variable for specifying an admin username exists.
-                # If so, call Functions-PSStoredCredentials.ps1 and attempt to grab the stored credentials.
-                # If not, fall back to the standard annoying prompt.
+                # This is a check to see if the environment variable for specifying an admin username exists
+                # If so, call Functions-PSStoredCredentials.ps1 and attempt to grab the stored credentials
+                # If not, fall back to the standard annoying prompt
                 try {
                     # The two lines below should be set in the PowerShell profile:
-                    #$KeyPath = "$Home\Documents\WindowsPowerShell"
-                    #. "$Env:DevPath\Profile\Functions-PSStoredCredentials.ps1"
+                    #   $KeyPath = "$Home\Documents\WindowsPowerShell"
+                    #   . "$Env:DevPath\Profile\Functions-PSStoredCredentials.ps1"
                     $O365Cred = (Get-StoredCredential -UserName $Env:AdminUPN)
-                }
-                catch {
+                } catch {
                     Write-Host -ForegroundColor 'Magenta' "`nAdmin credentials required..."
                     $O365Cred = (Get-Credential)
                 }
             
                 Write-Host -ForegroundColor 'White' "`nOffice 365 Exchange Online session starting..."
-                $Script:O365Session = New-PSSession -ConnectionUri https://outlook.office365.com/powershell-liveid/ `
-                    -ConfigurationName Microsoft.Exchange -Credential $O365Cred -Authentication Basic -AllowRedirection
+                $Script:O365Session = (New-PSSession -ConnectionUri https://outlook.office365.com/powershell-liveid/ `
+                    -ConfigurationName Microsoft.Exchange -Credential $O365Cred -Authentication Basic -AllowRedirection)
                 $Script:O365SessionCreated = $true
             }
 
