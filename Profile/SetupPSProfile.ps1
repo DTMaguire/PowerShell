@@ -1,16 +1,23 @@
 # Setup PowerShell Profile and Environment Variables for use with a standard user and a Domain Admin account
-# Version 1.0 - Copyright DM Tech - 2019
+# Version 1.2 - Copyright DM Tech - 2020
 #
-### Important! ###
-# Log into your machine with your Domain Admin account and run script in an elevated PowerShell session.
-#
-# This script will:
-# - Set the environment variables
-#       $Env:DevPath for System
-#       $Env:UPNSuffix for System
-# - Create subfolders in DevPath for Profile and Modules
-# - Copy a common PowerShell profile to launch the shared profile
-# - Download and set up the PSStoredCredential function
+# DM's PowerShell profile setup wizard
+# 
+#         --- Important! ---
+# 
+# This script should be running in an elevated PowerShell session logged into the machine with your Domain Admin account
+# Creation of the credential object will fail for any account other than the current user
+# 
+# Additionally, make sure you have an existing profile for your standard user account (log into your machine at least once)
+# 
+#  This script will:
+# 
+#  - Set the environment variables:
+#        $Env:DevPath for System
+#        $Env:UPNSuffix for System
+#  - Create subfolders in DevPath for Profile and Modules
+#  - Copy a common PowerShell profile to launch the shared profile
+#  - Download and set up the PSStoredCredential function
 
 #######################################################################################################################
 ## Start Profile Templates ##
@@ -102,38 +109,93 @@ Write-Host -ForegroundColor 'White' `
 ## End Profile Templates ##
 #######################################################################################################################
 
-$Script:SetDevPath = Read-Host `
-    -Prompt "`nEnter path for the DevPath environment variable to store your scripts (default is C:\Scripts\PowerShell)"
-
-if ([string]::IsNullOrWhiteSpace($SetDevPath)) {
-    $Script:SetDevPath = 'C:\Scripts\PowerShell'
-}
-
-if (!(Test-Path -Path $SetDevPath)) {
-    New-Item -ItemType 'Directory' -Path $SetDevPath -Force
-}
-
-try {
-    Set-Location $SetDevPath
+function SetEnvDev {
+    $Script:SetDevPath = Read-Host `
+    -Prompt "Enter a full path for the DevPath environment variable to store your scripts (defaults to 'C:\Scripts\PowerShell')"
+    if ([string]::IsNullOrWhiteSpace($SetDevPath)) {
+        $Script:SetDevPath = 'C:\Scripts\PowerShell'
+    }
     [System.Environment]::SetEnvironmentVariable('DevPath', $SetDevPath, [System.EnvironmentVariableTarget]::Machine)
 }
-catch {
-    Write-Error -Message `
-        "Unable to create or set location to $SetDevPath - please check your input and restart the setup script."
-    break
+
+function SetEnvUPN {
+    $Script:UPNSuffix = (Read-Host -Prompt "Enter the UPN suffix (public domain) for cloud services")
+    [System.Environment]::SetEnvironmentVariable('UPNSuffix', $UPNSuffix, [System.EnvironmentVariableTarget]::Machine)
 }
 
-do {
-    $Script:UPNSuffix = (Read-Host -Prompt "`nEnter the UPN suffix (public domain) for cloud services")
-    $Script:UserName = (Read-Host "Enter the username of your standard user account")
-    $Script:AdminName = (Read-Host "Enter the username of your Domain Admin account (default is $Env:Username)")
-    if ([string]::IsNullOrWhiteSpace($Script:AdminName)) {
-        $Script:AdminName = $Env:Username
-    }
-    $Script:AdminUPN = ("$AdminName" + '@' + "$UPNSuffix").ToLower()
-} until ((Read-Host -Prompt "Is the UPN `'$AdminUPN`' correct? (y/N)") -eq 'Y')
+Write-Host -ForegroundColor 'Magenta' @"
 
-[System.Environment]::SetEnvironmentVariable('UPNSuffix', $UPNSuffix, [System.EnvironmentVariableTarget]::Machine)
+ DM's PowerShell profile setup wizard
+ 
+         --- Important! ---
+ 
+ This script should be running in an elevated PowerShell session logged into the machine with your Domain Admin account
+ Creation of the credential object will fail for any account other than the current user
+ 
+ Additionally, make sure you have an existing profile for your standard user account (log into your machine at least once)
+ 
+ This script will:
+ 
+  - Set the environment variables:
+        $Env:DevPath for System
+        $Env:UPNSuffix for System
+  - Create subfolders in DevPath for Profile and Modules
+  - Copy a common PowerShell profile to launch the shared profile
+  - Download and set up the PSStoredCredential function
+
+"@
+
+# Set up the DevPath
+do {
+    if (($null -eq $Env:DevPath) -or (Read-Host -Prompt "`nDevPath set to: `'$Env:DevPath`' - change? (y/N)") -eq 'y') {
+        SetEnvDev
+    } else {
+        $Script:SetDevPath = $Env:DevPath
+    }
+
+    if (!(Test-Path -Path $SetDevPath)) {
+        Write-Host -ForegroundColor 'Cyan' "`nCreating: `'$SetDevPath`'`n"
+        New-Item -ItemType 'Directory' -Path $SetDevPath -Force | Out-Null
+    }
+
+    try {
+        Set-Location $SetDevPath
+    }
+    catch {
+        Write-Error -Message `
+            "Unable to create or set location to `'$SetDevPath`'"
+    }
+
+} until ($SetDevPath)
+
+# Set the user variables
+do {
+
+    if (($null -eq $Env:UPNSuffix) -or ((Read-Host -Prompt "`nUPNSuffix set to: `'$Env:UPNSuffix`' - change? (y/N)") -eq 'y')) {
+        SetEnvUPN
+    } else {
+        $Script:UPNSuffix = $Env:UPNSuffix
+    }
+
+    $Script:UserAccount = ($Env:Username).Split('.')[1]
+    if ((Read-Host -Prompt "`nSet username of your standard user account to `'$UserAccount`'? (Y/n)") -eq 'n') {
+        $Script:UserAccount = (Read-Host "`nEnter the username of your standard user account")
+    }
+
+    $Script:AdminUPN = ($Env:Username + '@' + $UPNSuffix).ToLower()
+
+} until ((Read-Host -Prompt "`nPlease confirm the AdminUPN is correct: `'$AdminUPN`' (y/N)") -eq 'y')
+
+# Check if the standard user is logged on before proceeding
+quser.exe 2>&1 | Select-Object -Skip 1 | ForEach-Object {
+    $CurrentLine = $_.Trim() -Replace '\s+',' ' -replace '>','' -Split '\s'
+    if ($UserAccount -match $CurrentLine[0]) {
+        Write-Host "`n"
+        Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
+        exit
+    }
+}
+
 
 if (!(Test-Path -Path "$SetDevPath\Modules")) {
     New-Item -ItemType 'Directory' -Name 'Modules' -Force
@@ -152,31 +214,42 @@ Add-Content -Path $PSCommonPath -Value '$env:AdminUPN = ' -NoNewline
 Add-Content -Path $PSCommonPath -Value "`'$AdminUPN`'"
 Add-Content -Path $PSCommonPath -Value $PSCommonTemplateAppend
 
-if ((Test-Path -Path "$ProfilePath\Shared-PowerShell_Profile.ps1" -PathType Leaf) -eq $false) {
-    New-Item -ItemType File "$ProfilePath\Shared-PowerShell_Profile.ps1" -Value $PSSharedTemplate    
+if ((Test-Path -Path "$ProfilePath\Shared-PowerShell_Profile.ps1" -PathType Leaf) -eq $true) {
+    Write-Host -ForegroundColor 'Cyan' "`nOverwriting existing file: $ProfilePath\Shared-PowerShell_Profile.ps1`n"
 }
+New-Item -ItemType File "$ProfilePath\Shared-PowerShell_Profile.ps1" -Value $PSSharedTemplate -Force
 
-$UserProfile = "C:\Users\$Username"
-$AdminProfile = "C:\Users\$AdminName"
+# Track down the 'Documents' folder location via the registry as it might have moved to somewhere like OneDrive
+$SIDs = (Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Name.Replace('HKEY_LOCAL_MACHINE','HKLM:')
+$SID = (ForEach-Object -InputObject $SIDs {(Get-ItemProperty $_ | Where-Object {$_.ProfileImagePath -like "*\$UserAccount"})})
 
-$PSCorePath = '\Documents\PowerShell\'
-$PSDesktopPath = '\Documents\WindowsPowerShell\'
+New-PSDrive HKU Registry HKEY_USERS
+reg.exe load "HKU\$UserAccount" "$($SID.ProfileImagePath)\NTUSER.DAT"
 
-$UserPSCore = ($UserProfile + $PSCorePath)
-$UserPSDesktop = ($UserProfile + $PSDesktopPath)
-$AdminPSCore = ($AdminProfile + $PSCorePath)
-$AdminPSDesktop = ($AdminProfile + $PSDesktopPath)
+$ShellFolders = ('HKU:\' + $UserAccount + '\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders')
+$UserDocuments = (Get-ItemPropertyValue $ShellFolders -Name 'Personal')
 
-$ProfileDestinations = @("$UserPSCore","$UserPSDesktop","$AdminPSCore","$AdminPSDesktop")
+reg.exe unload "HKU\$UserAccount"
+Remove-PSDrive HKU
 
-Write-Host "`nCopying `'Microsoft.PowerShell_profile.ps1`' to:`n"
-Write-Output $ProfileDestinations
+$AdminDocuments = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name 'Personal')
+
+$ProfileDestinations = @($AdminDocuments,$UserDocuments)
+$PSDirectories = @('PowerShell','WindowsPowerShell')
 
 foreach ($Destination in $ProfileDestinations) {
-    if (!(Test-Path -Path $Destination)) {
-        New-Item -ItemType Directory -Force -Path $Destination
+    foreach ($PSDirectory in $PSDirectories) {
+        
+        $PSProfilePath = (Join-Path -Path $Destination -ChildPath $PSDirectory)
+
+        if (!(Test-Path -PathType Container $PSProfilePath)) {
+            Write-Host -ForegroundColor 'Cyan' "`nCreating: $PSProfilePath"
+            New-Item -Path $Destination -Name $PSDirectory -ItemType Directory -Force
+        }
+
+        Write-Host -ForegroundColor 'Cyan' "`nCopying `'Microsoft.PowerShell_profile.ps1`' to: $PSProfilePath"
+        Copy-Item $PSCommonPath -Destination $PSProfilePath -Force
     }
-    Copy-Item $PSCommonPath -Destination $Destination -Force
 }
 
 Write-Host "`nFinished copying common profile files."
@@ -206,15 +279,13 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
     try {
         $WebClient.DownloadFile($StoredFunctionURL,"$ProfilePath\$ZipFile")
         Write-Host -ForegroundColor 'Green' "`nFile downloaded with default network settings.`n"
-    }
-    catch {
+    } catch {
         # Try again with different protocols...
         try {
             Set-SecurityProtocols
             $WebClient.DownloadFile($StoredFunctionURL,"$ProfilePath\$ZipFile")
-            Write-Host -ForegroundColor 'Cyan' "`nFile downloaded with updated network settings.`n"   
-        }
-        catch {
+            Write-Host -ForegroundColor 'Green' "`nFile downloaded with updated network settings.`n"   
+        } catch {
             Write-Error -Message `
             "`nUnable to download `'$ZipFile`' from GitHub. Download the file to your profile path and re-run this script."
         }
@@ -235,11 +306,12 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
             "`nUnable to expand archive - you can download the file manually and extract .ps1 file to $ProfilePath`n"
     }
 
-    Write-Host -ForegroundColor 'Cyan' `
-        "`nPrompting for credentials to save - be sure to use `'$AdminUPN`' as the username!"
+    Write-Host -ForegroundColor 'White' `
+        "`nPrompting for credentials to save - make sure the username is: `'$AdminUPN`'"
     Start-Sleep 1
     $Credential = Get-Credential -Message "Enter your Domain Admin account password" -UserName $AdminUPN
-    $Credential.Password | ConvertFrom-SecureString | Out-File "$($AdminPSCore)\$($Credential.Username).cred" -Force
+    $KeyPath = $AdminDocuments + '\PowerShell'
+    $Credential.Password | ConvertFrom-SecureString | Out-File "$($KeyPath)\$($Credential.Username).cred" -Force
 }
 
 $PSTemplate = [Uri]'https://github.com/DTMaguire/PowerShell/tree/master/Profile'
