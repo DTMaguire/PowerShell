@@ -20,7 +20,7 @@ foreach ($Server in $ServerList) {
         try {
             #Test-WSMan -ComputerName $Server | Out-Null
             $Run = ([System.Globalization.CultureInfo]([int]("0x" + (Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Server -AsJob).locale)))
-            }
+            
             $Run | Wait-Job -Timeout 5
 
             
