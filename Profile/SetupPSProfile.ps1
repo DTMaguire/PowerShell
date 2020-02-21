@@ -19,6 +19,12 @@
 #  - Copy a common PowerShell profile to launch the shared profile
 #  - Download and set up the PSStoredCredential function
 
+# Check for administrative rights
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Warning -Message "The script requires elevation"
+    break
+}
+
 #######################################################################################################################
 ## Start Profile Templates ##
 
@@ -31,10 +37,10 @@ $PSCommonTemplate = @'
 # - or for PowerShell Core (v6+): C:\Users\(UserName)\Documents\PowerShell
 
 <#
- This file is just used for setting the user-scope environment variable and launching the main script.
- Because I'm using multiple accounts, I just copy this into the location above for each one.
- Customisations are then handled in the shared script.
- I'm using this method instead of a global profile as to not impact any other user accounts.
+ This file is just used for setting the user-scope environment variable and launching the main script
+ Because I'm using multiple accounts, I just copy this into the location above for each one
+ Customisations are then handled in the shared script
+ I'm using this method instead of a global profile as to not impact any other user accounts
 #>
 
 # UPN of Admin account for connecting to Office 365 with stored credentials
@@ -123,7 +129,7 @@ function SetEnvUPN {
     [System.Environment]::SetEnvironmentVariable('UPNSuffix', $UPNSuffix, [System.EnvironmentVariableTarget]::Machine)
 }
 
-Write-Host -ForegroundColor 'Magenta' @"
+Write-Host -ForegroundColor 'Magenta' @'
 
  DM's PowerShell profile setup wizard
  
@@ -143,7 +149,7 @@ Write-Host -ForegroundColor 'Magenta' @"
   - Copy a common PowerShell profile to launch the shared profile
   - Download and set up the PSStoredCredential function
 
-"@
+'@
 
 # Set up the DevPath
 do {
