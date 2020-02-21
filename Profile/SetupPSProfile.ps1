@@ -21,7 +21,7 @@
 
 # Check for administrative rights
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Warning -Message "The script requires elevation"
+    Write-Warning -Message "This script requires elevation"
     break
 }
 
@@ -184,7 +184,7 @@ do {
     }
 
     $Script:UserAccount = ($Env:Username).Split('.')[1]
-    if ((Read-Host -Prompt "`nSet username of your standard user account to `'$UserAccount`'? (Y/n)") -eq 'n') {
+    if (($null -eq $UserAccount) -or (Read-Host -Prompt "`nSet username of your standard user account to `'$UserAccount`'? (Y/n)") -eq 'n') {
         $Script:UserAccount = (Read-Host "`nEnter the username of your standard user account")
     }
 
@@ -235,8 +235,14 @@ reg.exe load "HKU\$UserAccount" "$($SID.ProfileImagePath)\NTUSER.DAT"
 $ShellFolders = ('HKU:\' + $UserAccount + '\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders')
 $UserDocuments = (Get-ItemPropertyValue $ShellFolders -Name 'Personal')
 
+# Set the font size to 16 for the standard profile
+Set-ItemProperty -Path ('HKU:\' + $UserAccount + '\Console\%SystemRoot%_System32_WindowsPowerShell_v1.0_powershell.exe') -Name FontSize -Value 0x00100000
+
 reg.exe unload "HKU\$UserAccount"
 Remove-PSDrive HKU
+
+# Set the font size to 16 for the admin profile
+Set-ItemProperty -Path ('HKCU:\Console\%SystemRoot%_System32_WindowsPowerShell_v1.0_powershell.exe') -Name FontSize -Value 0x00100000
 
 $AdminDocuments = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name 'Personal')
 
@@ -258,47 +264,48 @@ foreach ($Destination in $ProfileDestinations) {
     }
 }
 
-Write-Host "`nFinished copying common profile files."
+Write-Host "`nFinished copying common profile files"
+
+function Set-SecurityProtocols() {
+    Write-Host -ForegroundColor 'White' "`nSecurity protocol issue, updating settings"
+    Write-Host "Original setting: $([System.Net.ServicePointManager]::SecurityProtocol)" 
+    $AvailableProtocols = [string]::join(', ', [Enum]::GetNames([System.Net.SecurityProtocolType])) 
+    Write-Host "Available: $AvailableProtocols"
+
+    # Use whatever protocols are available that the server supports 
+    try { 
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType] $AvailableProtocols
+    } catch { 
+        [System.Net.ServicePointManager]::SecurityProtocol = "Tls, Tls11, Tls12" 
+    } 
+} 
+
+$WebClient = New-Object System.Net.WebClient
+$WebClient.Proxy.Credentials = ([System.Net.CredentialCache]::DefaultNetworkCredentials)
 
 if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq 'N')) {
-
-    function Set-SecurityProtocols() {
-        Write-Host -ForegroundColor 'White' "`nSecurity protocol issue, updating settings."
-        Write-Host "Original setting: $([System.Net.ServicePointManager]::SecurityProtocol)" 
-        $AvailableProtocols = [string]::join(', ', [Enum]::GetNames([System.Net.SecurityProtocolType])) 
-        Write-Host "Available: $AvailableProtocols"
-
-        # Use whatever protocols are available that the server supports 
-        try { 
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType] $AvailableProtocols
-        } catch { 
-            [System.Net.ServicePointManager]::SecurityProtocol = "Tls, Tls11, Tls12" 
-        } 
-    } 
 
     Set-Location $ProfilePath
     $StoredFunctionURL = 'https://github.com/cunninghamp/PowerShell-Stored-Credentials/archive/v1.0.0.zip'
     $ZipFile = 'PowerShell-Stored-Credentials-1.0.0.zip'
-    $WebClient = New-Object System.Net.WebClient
-    $WebClient.Proxy.Credentials = ([System.Net.CredentialCache]::DefaultNetworkCredentials)
 
     try {
         $WebClient.DownloadFile($StoredFunctionURL,"$ProfilePath\$ZipFile")
-        Write-Host -ForegroundColor 'Green' "`nFile downloaded with default network settings.`n"
+        Write-Host -ForegroundColor 'Green' "`n$ZipFile downloaded with default network settings`n"
     } catch {
         # Try again with different protocols...
         try {
             Set-SecurityProtocols
             $WebClient.DownloadFile($StoredFunctionURL,"$ProfilePath\$ZipFile")
-            Write-Host -ForegroundColor 'Green' "`nFile downloaded with updated network settings.`n"   
+            Write-Host -ForegroundColor 'Green' "`n$ZipFile downloaded with updated network settings`n"   
         } catch {
-            Write-Error -Message `
-            "`nUnable to download `'$ZipFile`' from GitHub. Download the file to your profile path and re-run this script."
+            Write-Warning -Message `
+            "`nUnable to download `'$ZipFile`' from GitHub - save the file to your profile path and re-run this script"
         }
     }
 
     if (Test-Path -Path "$ProfilePath\$ZipFile" -PathType Leaf) {
-        Write-Host "Unpacking zip archive."
+        Write-Host "Unpacking zip archive"
         Expand-Archive -Path $ZipFile
         Start-Sleep 1
         Copy-Item `
@@ -320,6 +327,39 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
     $Credential.Password | ConvertFrom-SecureString | Out-File "$($KeyPath)\$($Credential.Username).cred" -Force
 }
 
+if (!((Read-Host -Prompt "`nSetup Remote Server Admin Tools now? (Y/n)") -eq 'N')) {
+
+    Set-Location $ProfilePath
+    $InstallRSATURL = 'https://gallery.technet.microsoft.com/Install-RSAT-for-Windows-75f5f92f/file/225312/1/Install-RSATv1809v1903v1909.ps1'
+    $InstallRSAT = 'Install-RSATv1809v1903v1909.ps1'
+
+    try {
+        $WebClient.DownloadFile($InstallRSATURL,"$ProfilePath\$InstallRSAT")
+        Write-Host -ForegroundColor 'Green' "`n$InstallRSAT downloaded with default network settings`n"
+    } catch {
+        # Try again with different protocols...
+        try {
+            Set-SecurityProtocols
+            $WebClient.DownloadFile($InstallRSATURL,"$ProfilePath\$InstallRSAT")
+            Write-Host -ForegroundColor 'Green' "`n$InstallRSAT downloaded with updated network settings`n"   
+        } catch {
+            Write-Error -Message `
+            "`nUnable to download `'$InstallRSAT`' from the PowerShell Gallery. Download the file to your profile path and re-run this script"
+            Write-Output [Uri]$InstallRSATURL
+        }
+    }
+
+    if (Test-Path -Path "$ProfilePath\$InstallRSAT" -PathType Leaf) {
+        Write-Host -ForegroundColor 'Cyan' "Starting RSAT Install`n"
+        Start-Sleep 1
+        . $ProfilePath\$InstallRSAT -All
+    } else {
+        Write-Warning `
+            "`nUnable to complete installation of RSAT - you can run it manually with: $InstallRSAT -All`n"
+    }
+}
+
 $PSTemplate = [Uri]'https://github.com/DTMaguire/PowerShell/tree/master/Profile'
 Write-Host -ForegroundColor 'Green' `
-    "`nInitial profile setup complete! See: $PSTemplate for example scripts to add to your own profile."
+    "`nInitial profile setup complete! See: $PSTemplate for example scripts to add to your own profile"
+Set-Location $SetDevPath
