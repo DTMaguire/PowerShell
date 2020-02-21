@@ -34,9 +34,8 @@ function ProcessMailbox ($Account) {
     if(Get-RemoteMailbox $AccountUPN -ErrorAction SilentlyContinue) {
 
         Write-Host -ForegroundColor 'White' "`nHiding `'$($Account.UserPrincipalName)`' from address lists..."
-        Set-RemoteMailbox -Identity $AccountUPN -HiddenFromAddressListsEnabled $True `
-            # Uncomment this to prevent email delivery: -AcceptMessagesOnlyFrom $AccountUPN `
-            -WhatIf:$WhatIf
+        Set-RemoteMailbox -Identity $AccountUPN -HiddenFromAddressListsEnabled $True -WhatIf:$WhatIf
+            # Uncomment this to prevent email delivery: -AcceptMessagesOnlyFrom $AccountUPN
         
         Write-Host -ForegroundColor 'White' "`nSetting mailbox `'$($Account.UserPrincipalName)`' to shared..."
         Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN `
