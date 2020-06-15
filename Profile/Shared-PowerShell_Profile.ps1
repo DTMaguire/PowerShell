@@ -5,8 +5,10 @@
 #   A system or user environment variable $Env:DevPath with the path to your scripts directory
 #   A system or user environment variable $Env:AdminUPN for the relevant domain/cloud service account
 
-# Set the start location to the DevPath
-Set-Location -Path "$Env:DevPath"
+# Add a function to jump back to the DevPath and set the start location
+function Open-DevPath {Set-Location $Env:DevPath}
+Open-DevPath
+New-Alias -Name 'odp' -Value Open-DevPath
 
 # Add the Modules folder in the $Env:DevPath to the PSModulePath for easy access to custom modules 
 $Env:PSModulePath += (';' + "$Env:DevPath" + '\Modules')
@@ -14,7 +16,7 @@ $Env:PSModulePath += (';' + "$Env:DevPath" + '\Modules')
 #### Fancy stored credentials bit ####
 
 # Set the $KeyPath variable to somewhere sensible as required by Functions-PSStoredCredentials.ps1 (per user)
-$KeyPath = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name 'Personal') + '\PowerShell'
+$KeyPath = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -Name 'Personal') + '\PowerShell'
 
 <#
     This checks if the $Env:AdminUPN environment variable exists for specifying an admin username for authentication
@@ -35,7 +37,7 @@ if (Test-Path "${KeyPath}\${env:AdminUPN}.cred") {
 
 #### End fancy stored credentials ####
 
-# Proxy settings to allow access to web/remote stuff like Office 365 and the PowerShell Gallery
+# Proxy settings to allow access to web/remote stuff like Office 365 and the PowerShell Gallery (if required on your network)
 #$WebClient = New-Object System.Net.WebClient
 #$WebClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
 
