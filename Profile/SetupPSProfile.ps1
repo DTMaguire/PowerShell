@@ -97,7 +97,8 @@ Write-Host -ForegroundColor 'Magenta' @'
 do {
     if (($null -eq $Env:DevPath) -or (Read-Host -Prompt "`nDevPath set to: `'$Env:DevPath`' - change? (y/N)") -eq 'y') {
         SetEnvDev
-    } else {
+    }
+    else {
         $Script:SetDevPath = $Env:DevPath
     }
 
@@ -120,7 +121,8 @@ do {
 
     if (($null -eq $Env:UPNSuffix) -or ((Read-Host -Prompt "`nUPNSuffix set to: `'$Env:UPNSuffix`' - change? (y/N)") -eq 'y')) {
         SetEnvUPN
-    } else {
+    }
+    else {
         $Script:UPNSuffix = $Env:UPNSuffix
     }
 
@@ -216,7 +218,8 @@ function Set-SecurityProtocols() {
     # Use whatever protocols are available that the server supports 
     try { 
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType] $AvailableProtocols
-    } catch { 
+    }
+    catch { 
         [System.Net.ServicePointManager]::SecurityProtocol = "Tls, Tls11, Tls12" 
     }
 }
@@ -230,13 +233,15 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
     try {
         $WebClient.DownloadFile($StoredFunctionURL,"$ProfilePath\$ZipFile")
         Write-Host -ForegroundColor 'Green' "`n$ZipFile downloaded with default network settings`n"
-    } catch {
+    }
+    catch {
         # Try again with different protocols...
         try {
             Set-SecurityProtocols
             $WebClient.DownloadFile($StoredFunctionURL,"$ProfilePath\$ZipFile")
             Write-Host -ForegroundColor 'Green' "`n$ZipFile downloaded with updated network settings`n"   
-        } catch {
+        }
+        catch {
             Write-Warning -Message "`nUnable to download `'$ZipFile`' from GitHub - save the file to your profile path and re-run this script"
         }
     }
@@ -249,7 +254,8 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
         Start-Sleep 1
         Remove-Item -Recurse -Path '.\PowerShell-Stored-Credentials-1.0.0' -Confirm:$false -Force
         Remove-Item -Path $ZipFile -Confirm:$false -Force
-    } else {
+    }
+    else {
         Write-Warning "`nUnable to expand archive - you can download the file manually and extract .ps1 file to $ProfilePath`n"
     }
 
@@ -270,16 +276,11 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
         Add-WindowsCapability -Online -Name $Tool | Out-Null
     }
     
-    if (!(Get-CimInstance -ClassName Win32_Product -Filter "Name='PowerShell 7-x64'")) {
-        try {
-            choco install powershell-core -y
-            $PS7 = $true
-        }
-        catch {
-            $PS7 = $false
-        }
-        
+    $Script:PS7 = [bool](Get-CimInstance -ClassName Win32_Product -Filter "Name='PowerShell 7-x64'")
+    if (!($PS7)) {
+        choco install powershell-core -y
     }
+    $Script:PS7 = [bool](Get-CimInstance -ClassName Win32_Product -Filter "Name='PowerShell 7-x64'")
 
     $PSAdminToolsURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/PSAdminTools.ps1'
     $WebClient.DownloadFile($PSAdminToolsURL,"$SetDevPath\PSAdminTools.ps1")
@@ -295,7 +296,8 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     if ($PS7) {
         # PowerShell 7: 
         $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
-    } else {
+    }
+    else {
         # PowerShell 5: 
         $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
     }
