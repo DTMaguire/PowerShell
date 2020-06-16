@@ -175,8 +175,8 @@ New-PSDrive HKU Registry HKEY_USERS
 reg.exe load "HKU\$UserAccount" "$($SID.ProfileImagePath)\NTUSER.DAT"
 
 $ShellFolders = ('HKU:\' + $UserAccount + '\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders')
-$UserDocuments = (Get-ItemPropertyValue $ShellFolders -Name 'Personal')
-$UserDesktop = (Get-ItemPropertyValue $ShellFolders -Name 'Desktop')
+$UserDocuments = Join-Path -Path $SID.ProfileImagePath -ChildPath (Get-ItemPropertyValue $ShellFolders -Name 'Personal').Split('\')[-1]
+$UserDesktop = Join-Path -Path $SID.ProfileImagePath -ChildPath (Get-ItemPropertyValue $ShellFolders -Name 'Desktop').Split('\')[-1]
 
 reg.exe unload "HKU\$UserAccount"
 Remove-PSDrive HKU
@@ -260,14 +260,23 @@ if (!((Read-Host -Prompt "`nSetup Remote Server Admin Tools now? (Y/n)") -eq 'N'
     Get-WindowsCapability -Name RSAT* -Online | Where-Object State -ne 'Installed' | Add-WindowsCapability -Online | Out-Null
 }
 
-if (!((Read-Host -Prompt "`nSetup PSAdminTools Launcher now? (Y/n)") -eq 'N')) {
-    # Copy/create the PSAdminTools.ps1 script first...
-    # PowerShell 7: $SourceFileLocation = 'C:\Windows\System32\runas.exe /user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq 'N')) {
+
+    if (!(Get-CimInstance -ClassName Win32_Product -Filter "Name='PowerShell 7-x64'")) {
+        choco install pwsh -y
+    }
+
+    $PSAdminToolsURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/PSAdminTools.ps1'
+    $WebClient.DownloadFile($PSAdminToolsURL,"$SetDevPath\PSAdminTools.ps1")
+
     $ShortcutLocation = Join-Path -Path $UserDesktop 'PSAdminTools Launcher.lnk'
     $WScriptShell = New-Object -ComObject WScript.Shell
     $Shortcut = $WScriptShell.CreateShortcut($ShortcutLocation)
     $Shortcut.TargetPath = 'C:\Windows\System32\runas.exe'
+    # PowerShell 5: 
     $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+    # PowerShell 7: 
+    #$Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
     $Shortcut.WorkingDirectory = '%DEVPATH%'
     $Shortcut.IconLocation = '%SystemRoot%\System32\BitLockerWizard.exe,0'
     $Shortcut.Save()
