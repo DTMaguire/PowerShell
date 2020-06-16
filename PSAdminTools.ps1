@@ -63,6 +63,7 @@ Function GenerateForm {
     $Form.Size = [System.Drawing.Size]::new($FormWidth,$FormHeight)
     $Form.FormBorderStyle = 'FixedDialog'
     $Form.Text = 'PSAdminTools'
+    $Form.StartPosition = 'CenterScreen'
     $Form.MaximizeBox = $False
     $Form.Topmost = $False   # Sets to always on top
 
