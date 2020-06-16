@@ -18,6 +18,7 @@
 #  - Create subfolders in DevPath for Profile and Modules
 #  - Copy a common PowerShell profile to launch the shared profile
 #  - Download and set up the PSStoredCredential function
+#  - Setup Remote Server Admin Tools with the PSAdminTools Launcher and PowerShell 7
 
 # Check for administrative rights
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
@@ -51,6 +52,7 @@ $PSCommonTemplateAppend = @'
 . "$Env:DevPath\Profile\Shared-PowerShell_Profile.ps1"
 
 '@
+
 ## End Profile Templates ##
 #######################################################################################################################
 
@@ -86,6 +88,8 @@ Write-Host -ForegroundColor 'Magenta' @'
   - Create subfolders in DevPath for Profile and Modules
   - Copy a common PowerShell profile to launch the shared profile
   - Download and set up the PSStoredCredential function
+  - Setup Remote Server Admin Tools
+  - Setup PSAdminTools and PowerShell 7
 
 '@
 
@@ -256,30 +260,58 @@ if (!((Read-Host -Prompt "`nSetup stored credentials function now? (Y/n)") -eq '
     $Credential.Password | ConvertFrom-SecureString | Out-File "$($KeyPath)\$($Credential.Username).cred" -Force
 }
 
-if (!((Read-Host -Prompt "`nSetup Remote Server Admin Tools now? (Y/n)") -eq 'N')) {
-    Get-WindowsCapability -Name RSAT* -Online | Where-Object State -ne 'Installed' | Add-WindowsCapability -Online | Out-Null
-}
-
 if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq 'N')) {
 
+    $AdminTools = @(Get-WindowsCapability -Name RSAT* -Online | Where-Object State -ne 'Installed')
+    $ToolsPath = (Split-Path $SetDevPath -Parent) + '\AdminTools'
+
+    foreach ($Tool in $AdminTools) {
+        Write-Progress -Activity "Installing:" -Status ($Tool.DisplayName) -PercentComplete (($AdminTools.IndexOf($Tool) / $AdminTools.Count) * 100)
+        Add-WindowsCapability -Online -Name $Tool | Out-Null
+    }
+    
     if (!(Get-CimInstance -ClassName Win32_Product -Filter "Name='PowerShell 7-x64'")) {
-        choco install pwsh -y
+        try {
+            choco install powershell-core -y
+            $PS7 = $true
+        }
+        catch {
+            $PS7 = $false
+        }
+        
     }
 
     $PSAdminToolsURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/PSAdminTools.ps1'
     $WebClient.DownloadFile($PSAdminToolsURL,"$SetDevPath\PSAdminTools.ps1")
 
+    $ExchOnlineURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/Connect-ExchOnline.ps1'
+    $WebClient.DownloadFile($ExchOnlineURL,"$SetDevPath\Connect-ExchOnline.ps1")
+
     $ShortcutLocation = Join-Path -Path $UserDesktop 'PSAdminTools Launcher.lnk'
     $WScriptShell = New-Object -ComObject WScript.Shell
     $Shortcut = $WScriptShell.CreateShortcut($ShortcutLocation)
     $Shortcut.TargetPath = 'C:\Windows\System32\runas.exe'
-    # PowerShell 5: 
-    $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
-    # PowerShell 7: 
-    #$Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+    
+    if ($PS7) {
+        # PowerShell 7: 
+        $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+    } else {
+        # PowerShell 5: 
+        $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+    }
+
     $Shortcut.WorkingDirectory = '%DEVPATH%'
     $Shortcut.IconLocation = '%SystemRoot%\System32\BitLockerWizard.exe,0'
     $Shortcut.Save()
+
+     # If the AdminTools directory doesn't exist, create it and copy some shortcuts across as a demo
+     if (!(Test-Path $ToolsPath)) {
+        New-Item -Path (Split-Path $SetDevPath -Parent) -Name 'AdminTools' -ItemType Directory -Force
+        Copy-Item -Path "$Env:APPDATA\Microsoft\Windows\Start Menu\Programs\Windows PowerShell\Windows PowerShell.lnk" -Destination "$ToolsPath\PowerShell 5.lnk"
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PowerShell\PowerShell 7 (x64).lnk' -Destination "$ToolsPath\PowerShell 7.lnk"
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Computer Management.lnk' -Destination $ToolsPath
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Registry Editor.lnk' -Destination $ToolsPath
+    }
 }
 
 $PSTemplate = [Uri]'https://github.com/DTMaguire/PowerShell/tree/master/Profile'
