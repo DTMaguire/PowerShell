@@ -175,14 +175,18 @@ $WebClient.DownloadFile($SharedProfileURL,"$ProfilePath\Shared-PowerShell_Profil
 
 # Track down the 'Documents' folder location via the registry as it might have moved to somewhere like OneDrive
 $SIDs = (Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Name.Replace('HKEY_LOCAL_MACHINE','HKLM:')
-$SID = (ForEach-Object -InputObject $SIDs {(Get-ItemProperty $_ | Where-Object {$_.ProfileImagePath -like "*\$UserAccount"})})
+$ProfileImagePath = (ForEach-Object -InputObject $SIDs {(Get-ItemProperty $_ | Where-Object {$_.ProfileImagePath -like "*\$UserAccount"})}).ProfileImagePath
 
 New-PSDrive HKU Registry HKEY_USERS
-reg.exe load "HKU\$UserAccount" "$($SID.ProfileImagePath)\NTUSER.DAT"
+reg.exe load "HKU\$UserAccount" "$ProfileImagePath\NTUSER.DAT"
 
 $ShellFolders = ('HKU:\' + $UserAccount + '\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders')
-$UserDocuments = Join-Path -Path $SID.ProfileImagePath -ChildPath (Get-ItemPropertyValue $ShellFolders -Name 'Personal').Split('\')[-1]
-$UserDesktop = Join-Path -Path $SID.ProfileImagePath -ChildPath (Get-ItemPropertyValue $ShellFolders -Name 'Desktop').Split('\')[-1]
+
+# The '-replace' is a trick to catch any returned values that include an environment variable as PowerShell immediately evaluates these
+# This means something like '%USERPROFILE%\Documents' read from the user's registry hive is turned into the path to the Admin's documents instead
+# This doesn't do anything for absolute paths since there is no match and the exection continues 
+$UserDocuments = (Get-ItemPropertyValue $ShellFolders -Name 'Personal') -replace "$Env:Username","$UserAccount"
+$UserDesktop = (Get-ItemPropertyValue $ShellFolders -Name 'Desktop') -replace "$Env:Username","$UserAccount"
 
 reg.exe unload "HKU\$UserAccount"
 Remove-PSDrive HKU
@@ -272,11 +276,13 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     $ToolsPath = (Split-Path $SetDevPath -Parent) + '\AdminTools'
 
     foreach ($Tool in $AdminTools) {
-        Write-Progress -Activity "Installing:" -Status ($Tool.DisplayName) -PercentComplete (($AdminTools.IndexOf($Tool) / $AdminTools.Count) * 100)
-        Add-WindowsCapability -Online -Name $Tool | Out-Null
+        Write-Progress -Activity "Installing" -Status ($Tool.DisplayName) -PercentComplete (($AdminTools.IndexOf($Tool) / $AdminTools.Count) * 100)
+        Add-WindowsCapability -Online -Name $Tool.Name | Out-Null
     }
     
     $Script:PS7 = [bool](Get-CimInstance -ClassName Win32_Product -Filter "Name='PowerShell 7-x64'")
+
+    # Try to install PowerShell 7, but don't care too much if it fails
     if (!($PS7)) {
         choco install powershell-core -y
     }
@@ -286,7 +292,7 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     $WebClient.DownloadFile($PSAdminToolsURL,"$SetDevPath\PSAdminTools.ps1")
 
     $ExchOnlineURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/Connect-ExchOnline.ps1'
-    $WebClient.DownloadFile($ExchOnlineURL,"$SetDevPath\Connect-ExchOnline.ps1")
+    $WebClient.DownloadFile($ExchOnlineURL,"$ProfilePath\Connect-ExchOnline.ps1")
 
     $ShortcutLocation = Join-Path -Path $UserDesktop 'PSAdminTools Launcher.lnk'
     $WScriptShell = New-Object -ComObject WScript.Shell
@@ -306,13 +312,30 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     $Shortcut.IconLocation = '%SystemRoot%\System32\BitLockerWizard.exe,0'
     $Shortcut.Save()
 
-     # If the AdminTools directory doesn't exist, create it and copy some shortcuts across as a demo
-     if (!(Test-Path $ToolsPath)) {
+    # If the AdminTools directory doesn't exist, create it and copy some shortcuts as a demo
+    if (!(Test-Path $ToolsPath)) {
         New-Item -Path (Split-Path $SetDevPath -Parent) -Name 'AdminTools' -ItemType Directory -Force
-        Copy-Item -Path "$Env:APPDATA\Microsoft\Windows\Start Menu\Programs\Windows PowerShell\Windows PowerShell.lnk" -Destination "$ToolsPath\PowerShell 5.lnk"
+    }
+    
+    Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Computer Management.lnk' -Destination $ToolsPath
+    Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Registry Editor.lnk' -Destination $ToolsPath
+    Copy-Item -Path "$Env:APPDATA\Microsoft\Windows\Start Menu\Programs\Windows PowerShell\Windows PowerShell.lnk" -Destination "$ToolsPath\PowerShell 5.lnk"
+
+    if ($PS7) {
         Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PowerShell\PowerShell 7 (x64).lnk' -Destination "$ToolsPath\PowerShell 7.lnk"
-        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Computer Management.lnk' -Destination $ToolsPath
-        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Registry Editor.lnk' -Destination $ToolsPath
+    }
+    
+    # Try out some optional components
+    try {
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Active Directory Administrative Center.lnk' -Destination $ToolsPath
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Active Directory Users and Computers.lnk' -Destination $ToolsPath
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\DHCP.lnk' -Destination $ToolsPath
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\DNS.LNK' -Destination $ToolsPath
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Group Policy Management.lnk' -Destination $ToolsPath
+        Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Server Manager.lnk' -Destination $ToolsPath
+    }
+    catch {
+        Write-Host -ForegroundColor Yellow "Oh well, I tried..."
     }
 }
 
