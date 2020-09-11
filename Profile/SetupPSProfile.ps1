@@ -145,7 +145,7 @@ do {
     }
 } #> # What was I thinking?!
 
-if ($UserAccount -match (Get-CimInstance -ClassName Win32_ComputerSystem).UserName -replace '^.*\\') {
+if ($UserAccount -eq ((Get-CimInstance -ClassName Win32_ComputerSystem).UserName -replace '^.*\\')) {
     Write-Host "`n"
     Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
     exit
@@ -182,11 +182,11 @@ if (Test-Path -Path $SharedProfilePath -PathType Leaf) {
 $SharedProfileURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/Shared-PowerShell_Profile.ps1'
 $WebClient.DownloadFile($SharedProfileURL,$SharedProfilePath)
 $ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_GeneralFunctions.ps1'
-$WebClient.DownloadFile($SharedProfileURL,$ProfileFunctionURL)
+$WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_GeneralFunctions.ps1")
 $ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_NetworkFunctions.ps1'
-$WebClient.DownloadFile($SharedProfileURL,$ProfileFunctionURL)
+$WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_NetworkFunctions.ps1")
 $ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_O365Functions.ps1'
-$WebClient.DownloadFile($SharedProfileURL,$ProfileFunctionURL)
+$WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_O365Functions.ps1")
 
 # Track down the 'Documents' folder location via the registry as it might have moved to somewhere like OneDrive
 $SIDs = (Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Name.Replace('HKEY_LOCAL_MACHINE','HKLM:')
