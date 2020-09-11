@@ -136,13 +136,19 @@ do {
 } until ((Read-Host -Prompt "`nPlease confirm the AdminUPN is correct: `'$AdminUPN`' (y/N)") -eq 'y')
 
 # Check if the standard user is logged on before proceeding
-quser.exe 2>&1 | Select-Object -Skip 1 | ForEach-Object {
-    $CurrentLine = $_.Trim() -Replace '\s+',' ' -replace '>','' -Split '\s'
+<# quser.exe 2>&1 | Select-Object -Skip 1 | ForEach-Object {
+    $CurrentLine = $_.Trim() -replace '\s+|>',' ' -replace '>','' -Split '\s'
     if ($UserAccount -match $CurrentLine[0]) {
         Write-Host "`n"
         Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
         exit
     }
+} #> # What was I thinking?!
+
+if ($UserAccount -match (Get-CimInstance -ClassName Win32_ComputerSystem).UserName -replace '^.*\\') {
+    Write-Host "`n"
+    Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
+    exit
 }
 
 # Create the Modules directory
@@ -167,11 +173,20 @@ Add-Content -Path $PSCommonPath -Value '$env:AdminUPN = ' -NoNewline
 Add-Content -Path $PSCommonPath -Value "`'$AdminUPN`'"
 Add-Content -Path $PSCommonPath -Value $PSCommonTemplateAppend
 
-if ((Test-Path -Path "$ProfilePath\Shared-PowerShell_Profile.ps1" -PathType Leaf) -eq $true) {
-    Write-Host -ForegroundColor 'Cyan' "`nOverwriting existing file: $ProfilePath\Shared-PowerShell_Profile.ps1`n"
+$SharedProfilePath = "$ProfilePath\Shared-PowerShell_Profile.ps1"
+
+if (Test-Path -Path $SharedProfilePath -PathType Leaf) {
+    Write-Host -ForegroundColor 'Cyan' "`nOverwriting existing file: $SharedProfilePath`n"
 }
+
 $SharedProfileURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/Shared-PowerShell_Profile.ps1'
-$WebClient.DownloadFile($SharedProfileURL,"$ProfilePath\Shared-PowerShell_Profile.ps1")
+$WebClient.DownloadFile($SharedProfileURL,$SharedProfilePath)
+$ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_GeneralFunctions.ps1'
+$WebClient.DownloadFile($SharedProfileURL,$ProfileFunctionURL)
+$ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_NetworkFunctions.ps1'
+$WebClient.DownloadFile($SharedProfileURL,$ProfileFunctionURL)
+$ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_O365Functions.ps1'
+$WebClient.DownloadFile($SharedProfileURL,$ProfileFunctionURL)
 
 # Track down the 'Documents' folder location via the registry as it might have moved to somewhere like OneDrive
 $SIDs = (Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Name.Replace('HKEY_LOCAL_MACHINE','HKLM:')
@@ -181,6 +196,7 @@ New-PSDrive HKU Registry HKEY_USERS
 reg.exe load "HKU\$UserAccount" "$ProfileImagePath\NTUSER.DAT"
 
 $ShellFolders = ('HKU:\' + $UserAccount + '\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders')
+$Identity = Get-ItemPropertyValue  ('HKU:\' + $UserAccount + '\Software\Microsoft\Office\16.0\Common\Identity') -Name 'ADUserName'
 
 # The '-replace' is a trick to catch any returned values that include an environment variable as PowerShell immediately evaluates these
 # This means something like '%USERPROFILE%\Documents' read from the user's registry hive is turned into the path to the Admin's documents instead
@@ -190,6 +206,10 @@ $UserDesktop = (Get-ItemPropertyValue $ShellFolders -Name 'Desktop') -replace "$
 
 reg.exe unload "HKU\$UserAccount"
 Remove-PSDrive HKU
+
+# Add the 'Identity'' variable for the standard user account
+Add-Content -Path $SharedProfilePath -Value '$Identity = ' -NoNewline
+Add-Content -Path $SharedProfilePath -Value "`'$Identity`'"
 
 $AdminDocuments = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -Name 'Personal')
 
@@ -290,9 +310,6 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
 
     $PSAdminToolsURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/PSAdminTools.ps1'
     $WebClient.DownloadFile($PSAdminToolsURL,"$SetDevPath\PSAdminTools.ps1")
-
-    $ExchOnlineURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/Connect-ExchOnline.ps1'
-    $WebClient.DownloadFile($ExchOnlineURL,"$ProfilePath\Connect-ExchOnline.ps1")
 
     $ShortcutLocation = Join-Path -Path $UserDesktop 'PSAdminTools Launcher.lnk'
     $WScriptShell = New-Object -ComObject WScript.Shell
