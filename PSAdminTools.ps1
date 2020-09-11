@@ -82,7 +82,7 @@ Function GenerateForm {
             $Button = [System.Windows.Forms.Button]::new()
             $Button.Location = [System.Drawing.Size]::new($ButtonXPos,$ButtonYPos)
             $Button.Size = [System.Drawing.Size]::new($ButtonWidth,$ButtonHeight)
-            $Button.Text = $Tool.Name -replace ('.lnk','')
+            $Button.Text = ($Tool.Name -replace '.lnk')
             $LaunchTool = [System.Management.Automation.ScriptBlock]::Create("Invoke-Item '$($Tool.FullName)'")
             $Button.Add_Click($LaunchTool)
             $Form.Controls.Add($Button)
