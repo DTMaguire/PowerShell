@@ -42,10 +42,15 @@ function Connect-Exchange {
 function Connect-SfBOnline {
     if ((Get-SfBSession).State -notmatch 'Opened') {
 
-        $Script:SfBSession = New-CsOnlineSession -Credential $AdminCredential
+        try {
+            $Script:SfBSession = New-CsOnlineSession -Credential $AdminCredential
         
-        Import-PSSession $SfBSession -Verbose
-        Enable-CsOnlineSessionForReconnection
+            Import-PSSession $SfBSession -Verbose
+            Enable-CsOnlineSessionForReconnection   
+        }
+        catch {
+            "Unable to establish session to Skype for Business Online. This feature requires the Skype for Business Online PowerShell Module: $($_)"
+        }
         
     } else {
         Write-Warning "Existing Skype for Business Online session detected - to close the session, run: 'Remove-SfBOnline'"
