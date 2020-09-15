@@ -43,21 +43,17 @@ function SetUserLicenses {
                         'FLOW_O365_P1',
                         'EXCHANGE_S_STANDARD'
 
-    $LicenseOptions = (New-MsolLicenseOptions -AccountSkuId 'NSWLandRegistryServices:TEAMS_EXPLORATORY' `
-        -DisabledPlans $DisabledPlans)
+    $LicenseOptions = (New-MsolLicenseOptions -AccountSkuId 'NSWLandRegistryServices:TEAMS_EXPLORATORY' -DisabledPlans $DisabledPlans)
 
     while ($MsolUser.Licenses.AccountSkuID -notcontains 'NSWLandRegistryServices:MCOEV' -and !($WhatIf)) {
         
         Write-Host "`nNo Microsoft 365 Phone System or Teams license found." -ForegroundColor Yellow
         Write-Host "Assigning licenses temporarily and waiting 2 minutes for them to apply...`n" -ForegroundColor Cyan
      
-        Set-MsolUserLicense -UserPrincipalName $Identity `
-            -AddLicenses 'NSWLandRegistryServices:TEAMS_EXPLORATORY' `
-            -LicenseOptions $LicenseOptions
+        Set-MsolUserLicense -UserPrincipalName $Identity -AddLicenses 'NSWLandRegistryServices:TEAMS_EXPLORATORY' -LicenseOptions $LicenseOptions
         Start-Sleep 5
     
-        Set-MsolUserLicense -UserPrincipalName $Identity `
-            -AddLicenses 'NSWLandRegistryServices:MCOEV'
+        Set-MsolUserLicense -UserPrincipalName $Identity -AddLicenses 'NSWLandRegistryServices:MCOEV'
         Start-Sleep 115
 
         $Script:MsolUser = (Get-MsolUser -UserPrincipalName $Identity)
