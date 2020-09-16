@@ -338,8 +338,27 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Registry Editor.lnk' -Destination $ToolsPath
     Copy-Item -Path "$Env:APPDATA\Microsoft\Windows\Start Menu\Programs\Windows PowerShell\Windows PowerShell.lnk" -Destination "$ToolsPath\PowerShell 5.lnk"
 
+    $PSShortcut = "$ToolsPath\PowerShell 5.lnk"
+
+    if (Test-Path -Path $PSShortcut) {
+        # Set the 'Run as Administrator' property on the shortcut
+        $Bytes = [System.IO.File]::ReadAllBytes($PSShortcut)
+        $Bytes[0x15] = $Bytes[0x15] -bor 0x20 
+        [System.IO.File]::WriteAllBytes($PSShortcut,$Bytes)
+    }
+    
+
     if ($PS7) {
         Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PowerShell\PowerShell 7 (x64).lnk' -Destination "$ToolsPath\PowerShell 7.lnk"
+        
+        $PSShortcut = "$ToolsPath\PowerShell 7.lnk"
+
+        if (Test-Path -Path $PSShortcut) {
+            # Set the 'Run as Administrator' property on the shortcut
+            $Bytes = [System.IO.File]::ReadAllBytes($PSShortcut)
+            $Bytes[0x15] = $Bytes[0x15] -bor 0x20 
+            [System.IO.File]::WriteAllBytes($PSShortcut,$Bytes)
+        }
     }
     
     # Try out some optional components
@@ -354,6 +373,15 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     catch {
         Write-Host -ForegroundColor Yellow "Oh well, I tried..."
     }
+}
+
+if (!((Read-Host -Prompt "`nInstall additional PowerShell modules for Azure and Office 365? (Y/n)") -eq 'N')) {
+
+    Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+    Update-Module
+    Install-Module -Name 'AzureAD','MSOnline','ExchangeOnlineManagement','MicrosoftTeams'
+    
+    Get-InstalledModule | ForEach-Object {Get-InstalledModule -Name $_.Name -AllVersions | Where-Object -Property Version -lt -Value $_.Version} | Uninstall-Module -Verbose
 }
 
 $PSTemplate = [Uri]'https://github.com/DTMaguire/PowerShell/tree/master/Profile'
