@@ -13,7 +13,7 @@ Write-Output $AWSUsers
 Write-Host -ForegroundColor 'Green' "`n`nTotal users: " $AWSUsers.Count "`n"
 
 foreach ($User in $AWSUsers) {
-    $UserAcc = (Get-ADUser -LDAPFilter "(displayName=*$User*)" -Properties Name,SamAccountName,UserPrincipalName,Memberof)
+    $UserAcc = (Get-ADUser -LDAPFilter "(displayName=*$User*)" -Properties Name,SamAccountName,UserPrincipalName,MemberOf)
 
     foreach ($Acc in $UserAcc) {
         $AccountsArray += $Acc

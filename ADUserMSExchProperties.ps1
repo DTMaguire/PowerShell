@@ -54,4 +54,4 @@ Get-ADUser -Filter * -Properties * | `
     @{n='RemoteRecipientType';e={$RemoteRecipientType[[int]$_.msExchRemoteRecipientType]}}, `
     @{n='RecipientTypeDetails';e={$RecipientTypeDetails[$_.msExchRecipientTypeDetails]}} | `
     Export-Csv -NoTypeInformation ..\Output\msExchRecipientAttributes.csv
-    Invoke-Item ..\Output\msExchRecipientAttributes.csv
+    #Invoke-Item ..\Output\msExchRecipientAttributes.csv

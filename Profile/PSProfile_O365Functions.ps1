@@ -53,7 +53,7 @@ function Connect-SfBOnline {
         }
         
     } else {
-        Write-Warning "Existing Skype for Business Online session detected - to close the session, run: 'Remove-SfBOnline'"
+        Write-Warning "Existing Skype for Business Online session detected. To close the session, run: 'Remove-SfBOnline'"
     }
 }
 

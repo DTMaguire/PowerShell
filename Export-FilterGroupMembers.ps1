@@ -4,6 +4,17 @@
 #Requires -Modules ActiveDirectory
 using namespace System.Collections.Generic
 
+function Update-UserObject {
+    #param (
+    #    $MemberSAM
+    #)
+    Write-Host -ForegroundColor 'White' "$MemberSAM"
+    $UserObject = (Get-ADUser -Identity $MemberSAM -Properties *)
+    $Script:FilterGroupMembership = ($UserObject | Select-Object -ExpandProperty MemberOf | Where-Object {$_ -match "$Filter"} | Get-ADGroup | Select-Object -ExpandProperty SamAccountName)
+    $UserAttributes = ($UserObject | Select-Object $UserProps)
+    $UserArray.Add($UserAttributes)
+}
+
 do {
     $Filter = Read-Host -Prompt "`nInput group string to search, or 'Q' to exit"
     if ($Filter -eq 'q') {
@@ -29,8 +40,7 @@ if (Test-Path $OutputCSV) {
 Write-Host -ForegroundColor 'White' "`nFiltering groups matching: `'$Filter`'`n "
 Start-Sleep 1
 
-$Groups = (Get-ADGroup -Filter {Name -like $FilterString} -Properties * | Where-Object {$_.GroupCategory -like "Security"} | `
-    Sort-Object -Property SamAccountName | Select-Object SamAccountName, Description, Members)
+$Groups = (Get-ADGroup -Filter {Name -like $FilterString} -Properties * | Where-Object {$_.GroupCategory -like "Security"} | Sort-Object -Property SamAccountName | Select-Object SamAccountName,Description,Members)
 $GroupsTotal = $Groups.Count
 Write-Host $GroupsTotal
 Start-Sleep 2
@@ -43,10 +53,9 @@ ForEach ($Group in $Groups) {
     $NotUnique = 0
     $GroupSAM = $Group.SamAccountName
 
-    Write-Progress -Id 1 -Activity "Gathering Group Information for: `'$GroupSAM`'" `
-        -PercentComplete ($CurGroup / $GroupsTotal * 100)
+    Write-Progress -Id 1 -Activity "Gathering Group Information for: `'$GroupSAM`'" -PercentComplete ($CurGroup / $GroupsTotal * 100)
 
-    $GroupMembers = (Get-ADGroupMember -Identity $GroupSAM | Sort-Object | Select-Object Name, SamAccountName, ObjectClass)
+    $GroupMembers = (Get-ADGroupMember -Identity $GroupSAM -Recursive | Sort-Object | Select-Object Name, SamAccountName, ObjectClass)
     $MembersTotal = $GroupMembers.Count
 
     if ($MembersTotal -lt 1) {
@@ -63,8 +72,7 @@ ForEach ($Group in $Groups) {
             $CurUser++
             $MemberSAM = $Member.SamAccountName
 
-            Write-Progress -Id 2 -Activity "Gathering Member Information for: `'$($Member.Name)`'" `
-                -PercentComplete ($CurUser / $MembersTotal * 100) #-ParentId 1
+            Write-Progress -Id 2 -Activity "Gathering Member Information for: `'$($Member.Name)`'" -PercentComplete ($CurUser / $MembersTotal * 100) #-ParentId 1
             Start-Sleep -Milliseconds 50
 
             if ($Member.ObjectClass -eq 'computer') {
@@ -72,16 +80,16 @@ ForEach ($Group in $Groups) {
                 Continue
             }
 
-            if ($UserArray.Contains($MemberSAM)) {
-                    $NotUnique++
+            if ($UserArray.Count -lt 1) {
+                Update-UserObject
+            } elseif (($UserArray.SamAccountName).Contains($MemberSAM)) {
+                $NotUnique++
             } elseif ($Member.ObjectClass -eq 'user') {
-                Write-Host -ForegroundColor 'White' "$MemberSAM"
-                $UserObject = (Get-ADUser -Identity $MemberSAM -Properties *)
-                $FilterGroupMembership = ($UserObject | Select-Object -ExpandProperty MemberOf | `
-                    Where-Object {$_ -match "$Filter"} | Get-ADGroup | Select-Object -ExpandProperty SamAccountName)
-                $UserAttributes = ($UserObject | Select-Object $UserProps)
-                $UserArray.Add($UserAttributes)
-            }                               
+                Update-UserObject
+            } else {
+                Write-Host -ForegroundColor 'Yellow' "`nWhat kind of account object is this anyway?"
+                Write-Output $Member
+            }             
         }
         Write-Host -ForegroundColor 'Magenta' "`nMembers already matched:" $NotUnique
         Write-Host -ForegroundColor 'Cyan' "Current unique members: " $UserArray.Count
@@ -89,7 +97,7 @@ ForEach ($Group in $Groups) {
 }
 
 $UserArray | Sort-Object SamAccountName | Format-Table Name, SamAccountName, FilteredGroups
-Write-Host -ForegroundColor 'White' "Total of unique $Filter group members: ${UserArray.Count}`n"
+Write-Host -ForegroundColor 'White' "Total of unique $Filter group members: $(${UserArray}.Count)`n"
 
 if ($UserArray.Count -ge 1) {
     $UserArray | Export-Csv -NoTypeInformation -Path $OutputCSV
