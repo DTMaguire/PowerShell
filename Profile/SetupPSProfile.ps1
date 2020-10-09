@@ -1,27 +1,35 @@
 # Setup PowerShell Profile and Environment Variables for use with a standard user and a Domain Admin account
-# Version 1.4 - Copyright DM Tech - 2020
-#
-# DM's PowerShell profile setup wizard
-# 
-#         --- Important! ---
-# 
-# This script should be running in an elevated PowerShell session logged into the machine with your Domain Admin account
-# Creation of the credential object will fail for any account other than the current user
-# 
-# Additionally, make sure you have an existing profile for your standard user account (log into your machine at least once)
-# 
-#  This script will:
-# 
-#  - Set the environment variables:
-#        $Env:DevPath for System
-#        $Env:UPNSuffix for System
-#  - Create subfolders in DevPath for Profile and Modules
-#  - Copy a common PowerShell profile to launch the shared profile
-#  - Download and set up the PSStoredCredential function
-#  - Setup Remote Server Admin Tools with the PSAdminTools Launcher and PowerShell 7
+# Version 1.6 - Copyright DM Tech - 2020
+
+$StartupComment = @'
+
+ DM's PowerShell profile setup wizard
+ 
+         --- Important! ---
+ 
+ This script should be running in an elevated PowerShell session logged into the machine with your Domain Admin account
+ Creation of the credential object will fail for any account other than the user is it being created for!
+ 
+ Additionally, make sure you have an existing profile for your standard user account (log into your machine at least once)
+ 
+ This script will:
+ 
+  - Set the environment variables:
+        $Env:DevPath for System
+        $Env:UPNSuffix for System
+  - Create subfolders in $Env:DevPath for 'Profile' and 'Modules'
+  - Create a common profile file, then copy it to the various profile locations for each user profile
+  - Create a shared profile each of the common profiles invoke via dot-sourcing
+  - Download and set up the PSStoredCredential function
+  - Setup Remote Server Admin Tools
+  - Setup PSAdminTools and PowerShell 7
+  - Install and update additional PowerShell modules for Azure and Office 365
+
+'@
 
 # Check for administrative rights
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).
+        IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Warning -Message "This script requires elevation"
     break
 }
@@ -57,7 +65,8 @@ $PSCommonTemplateAppend = @'
 #######################################################################################################################
 
 function SetEnvDev {
-    $Script:SetDevPath = Read-Host -Prompt "Enter a full path for the DevPath environment variable to store your scripts (defaults to 'C:\Scripts\PowerShell')"
+    $Script:SetDevPath =
+        Read-Host -Prompt "Enter a full path for the DevPath environment variable to store your scripts (defaults to 'C:\Scripts\PowerShell')"
     if ([string]::IsNullOrWhiteSpace($SetDevPath)) {
         $Script:SetDevPath = 'C:\Scripts\PowerShell'
     }
@@ -69,33 +78,11 @@ function SetEnvUPN {
     [System.Environment]::SetEnvironmentVariable('UPNSuffix', $UPNSuffix, [System.EnvironmentVariableTarget]::Machine)
 }
 
-Write-Host -ForegroundColor 'Magenta' @'
-
- DM's PowerShell profile setup wizard
- 
-         --- Important! ---
- 
- This script should be running in an elevated PowerShell session logged into the machine with your Domain Admin account
- Creation of the credential object will fail for any account other than the current user
- 
- Additionally, make sure you have an existing profile for your standard user account (log into your machine at least once)
- 
- This script will:
- 
-  - Set the environment variables:
-        $Env:DevPath for System
-        $Env:UPNSuffix for System
-  - Create subfolders in DevPath for Profile and Modules
-  - Copy a common PowerShell profile to launch the shared profile
-  - Download and set up the PSStoredCredential function
-  - Setup Remote Server Admin Tools
-  - Setup PSAdminTools and PowerShell 7
-
-'@
+Write-Host -ForegroundColor 'Magenta' $StartupComment
 
 # Set up the DevPath
 do {
-    if (($null -eq $Env:DevPath) -or (Read-Host -Prompt "`nDevPath set to: `'$Env:DevPath`' - change? (y/N)") -eq 'y') {
+    if (($null -eq $Env:DevPath) -or (Read-Host -Prompt "`nSet DevPath to `'$Env:DevPath`'? (Y/n)") -eq 'n') {
         SetEnvDev
     }
     else {
@@ -119,7 +106,7 @@ do {
 # Set the user variables
 do {
 
-    if (($null -eq $Env:UPNSuffix) -or ((Read-Host -Prompt "`nUPNSuffix set to: `'$Env:UPNSuffix`' - change? (y/N)") -eq 'y')) {
+    if (($null -eq $Env:UPNSuffix) -or ((Read-Host -Prompt "`nSet UPNSuffix to `'$Env:UPNSuffix`'? (Y/n)") -eq 'n')) {
         SetEnvUPN
     }
     else {
@@ -145,21 +132,23 @@ do {
     }
 } #> # What was I thinking?!
 
-if ($UserAccount -eq ((Get-CimInstance -ClassName Win32_ComputerSystem).UserName -replace '^.*\\')) {
+<# if ($UserAccount -eq ((Get-CimInstance -ClassName Win32_ComputerSystem).UserName -replace '^.*\\')) {
     Write-Host "`n"
     Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
     exit
 }
-
+#>
 # Create the Modules directory
 if (!(Test-Path -Path "$SetDevPath\Modules")) {
-    New-Item -ItemType 'Directory' -Name 'Modules' -Force
+    Write-Host -ForegroundColor 'Cyan' "`nCreating: $SetDevPath\Modules"
+    New-Item -ItemType 'Directory' -Name 'Modules' -Force | Out-Null
 }
 
 # Create the Profile directory
 $ProfilePath = "$SetDevPath\Profile"
 if (!(Test-Path -Path $ProfilePath)) {
-    New-Item -ItemType 'Directory' -Name 'Profile' -Force
+    Write-Host -ForegroundColor 'Cyan' "`nCreating: $SetDevPath\Profile"
+    New-Item -ItemType 'Directory' -Name 'Profile' -Force | Out-Null
 }
 
 # Set up the web client to download files
@@ -168,7 +157,7 @@ $WebClient.Proxy.Credentials = ([System.Net.CredentialCache]::DefaultNetworkCred
 
 # Create a common profile from the template
 $PSCommonPath = "$ProfilePath\Microsoft.PowerShell_profile.ps1"
-New-Item -ItemType File $PSCommonPath -Value $PSCommonTemplate -Force
+New-Item -ItemType File $PSCommonPath -Value $PSCommonTemplate -Force | Out-Null
 Add-Content -Path $PSCommonPath -Value '$env:AdminUPN = ' -NoNewline
 Add-Content -Path $PSCommonPath -Value "`'$AdminUPN`'"
 Add-Content -Path $PSCommonPath -Value $PSCommonTemplateAppend
@@ -190,26 +179,55 @@ $WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_O365Function
 
 # Track down the 'Documents' folder location via the registry as it might have moved to somewhere like OneDrive
 $SIDs = (Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Name.Replace('HKEY_LOCAL_MACHINE','HKLM:')
-$ProfileImagePath = (ForEach-Object -InputObject $SIDs {(Get-ItemProperty $_ | Where-Object {$_.ProfileImagePath -like "*\$UserAccount"})}).ProfileImagePath
+$UserRegistryPath = (ForEach-Object -InputObject $SIDs {(Get-ItemProperty $_ | Where-Object {$_.ProfileImagePath -like "*\$UserAccount"})})
+$UserProfileImagePath = $UserRegistryPath.ProfileImagePath
+$UserSID = $UserRegistryPath.PSChildName
 
-New-PSDrive HKU Registry HKEY_USERS
-reg.exe load "HKU\$UserAccount" "$ProfileImagePath\NTUSER.DAT"
+try {
+    if ($UserRegistryPath) {
 
-$ShellFolders = ('HKU:\' + $UserAccount + '\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders')
-$Identity = Get-ItemPropertyValue  ('HKU:\' + $UserAccount + '\Software\Microsoft\Office\16.0\Common\Identity') -Name 'ADUserName'
+        New-PSDrive HKU Registry HKEY_USERS | Out-Null
+        $HKUser = 'HKU:\' + $UserSID
 
-# The '-replace' is a trick to catch any returned values that include an environment variable as PowerShell immediately evaluates these
-# This means something like '%USERPROFILE%\Documents' read from the user's registry hive is turned into the path to the Admin's documents instead
-# This doesn't do anything for absolute paths since there is no match and the exection continues 
-$UserDocuments = (Get-ItemPropertyValue $ShellFolders -Name 'Personal') -replace "$Env:Username","$UserAccount"
-$UserDesktop = (Get-ItemPropertyValue $ShellFolders -Name 'Desktop') -replace "$Env:Username","$UserAccount"
+        # This is an attempt to gather the user-specific variables from the registry
+        # It falls back to trying to mount the user hive if nothing is returned from: 'HKU:\' + $UserSID
+        if (!(Test-Path $HKUser)) {
+            reg.exe load "HKU\$UserAccount" "$UserProfileImagePath\NTUSER.DAT" | Out-Null
+            $HKUser = 'HKU:\' + $UserAccount
+        }
 
-reg.exe unload "HKU\$UserAccount"
-Remove-PSDrive HKU
+        $ShellFolders = ($HKUser + '\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders')
 
-# Add the 'Identity'' variable for the standard user account
-Add-Content -Path $SharedProfilePath -Value '$Identity = ' -NoNewline
-Add-Content -Path $SharedProfilePath -Value "`'$Identity`'"
+        # The '-replace' is a trick to catch any returned values that include an environment variable as PowerShell immediately evaluates them
+        # This means '%USERPROFILE%\Documents' in the user's registry hive is turned into the path to the Admin's Documents instead
+        # This doesn't do anything for absolute paths since there is no match and the exection continues 
+        $UserDocuments = ((Get-ItemPropertyValue $ShellFolders -Name 'Personal').Replace("$Env:UserProfile","$UserProfileImagePath"))
+        $UserDesktop = ((Get-ItemPropertyValue $ShellFolders -Name 'Desktop').Replace("$Env:UserProfile","$UserProfileImagePath"))
+        $Identity = (Get-ItemProperty ($HKUser + '\Software\Microsoft\Office\16.0\Common\Identity')).ADUserName
+
+        Add-Content -Path $SharedProfilePath -Value '$Identity = ' -NoNewline
+        Add-Content -Path $SharedProfilePath -Value "`'$Identity`'"
+
+    }
+    else {
+        Write-Error -Message "No profile for `'$UserName`' found!"
+        exit
+    }
+}
+catch {
+    Write-Error -Message "Unable to set one or more user variables: $($_)"
+    Write-Warning -Message "Please make sure a copy of `'Microsoft.PowerShell_profile.ps1`' file is in the standard user's Documents\PowerShell directories."
+    # $UserDocuments = $null
+    if (!(Test-Path $UserDesktop)) {
+        $UserDesktop = $SetDevPath   
+    }
+}
+finally {
+    if (Test-Path ('HKU:\' + $UserAccount)) {
+        reg.exe unload "HKU\$UserAccount" | Out-Null
+    }
+    Remove-PSDrive HKU
+}
 
 $AdminDocuments = (Get-ItemPropertyValue 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -Name 'Personal')
 
@@ -223,15 +241,15 @@ foreach ($Destination in $ProfileDestinations) {
 
         if (!(Test-Path -PathType Container $PSProfilePath)) {
             Write-Host -ForegroundColor 'Cyan' "`nCreating: $PSProfilePath"
-            New-Item -Path $Destination -Name $PSDirectory -ItemType Directory -Force
+            New-Item -Path $Destination -Name $PSDirectory -ItemType Directory -Force | Out-Null
         }
 
         Write-Host -ForegroundColor 'Cyan' "`nCopying `'Microsoft.PowerShell_profile.ps1`' to: $PSProfilePath"
-        Copy-Item $PSCommonPath -Destination $PSProfilePath -Force
+        Copy-Item $PSCommonPath -Destination $PSProfilePath -Force | Out-Null
     }
 }
 
-Write-Host "`nFinished copying common profile files"
+Write-Host "`nFinished copying common profile files."
 
 function Set-SecurityProtocols() {
     Write-Host -ForegroundColor 'White' "`nSecurity protocol issue, updating settings"
@@ -318,11 +336,13 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
     
     if ($PS7) {
         # PowerShell 7: 
-        $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+        $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" +
+            ' /savecred "C:\Program Files\PowerShell\7\pwsh.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
     }
     else {
         # PowerShell 5: 
-        $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" + ' /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
+        $Shortcut.Arguments = '/user:' + "$Env:USERDOMAIN\$Env:USERNAME" +
+            ' /savecred "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File %DEVPATH%\PSAdminTools.ps1"'
     }
 
     $Shortcut.WorkingDirectory = '%DEVPATH%'
@@ -331,7 +351,8 @@ if (!((Read-Host -Prompt "`nSetup PSAdminTools and PowerShell 7 now? (Y/n)") -eq
 
     # If the AdminTools directory doesn't exist, create it and copy some shortcuts as a demo
     if (!(Test-Path $ToolsPath)) {
-        New-Item -Path (Split-Path $SetDevPath -Parent) -Name 'AdminTools' -ItemType Directory -Force
+        Write-Host -ForegroundColor 'Cyan' "`nCreating: $ToolsPath"
+        New-Item -Path (Split-Path $SetDevPath -Parent) -Name 'AdminTools' -ItemType Directory -Force | Out-Null
     }
     
     Copy-Item -Path 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\Computer Management.lnk' -Destination $ToolsPath
@@ -380,8 +401,9 @@ if (!((Read-Host -Prompt "`nInstall additional PowerShell modules for Azure and 
     Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
     Update-Module
     Install-Module -Name 'AzureAD','MSOnline','ExchangeOnlineManagement','MicrosoftTeams'
-    
-    Get-InstalledModule | ForEach-Object {Get-InstalledModule -Name $_.Name -AllVersions | Where-Object -Property Version -lt -Value $_.Version} | Uninstall-Module -Verbose
+
+    Get-InstalledModule | ForEach-Object {Get-InstalledModule -Name $_.Name -AllVersions |
+        Where-Object -Property Version -lt -Value $_.Version} | Uninstall-Module -Verbose
 }
 
 $PSTemplate = [Uri]'https://github.com/DTMaguire/PowerShell/tree/master/Profile'
