@@ -122,22 +122,6 @@ do {
 
 } until ((Read-Host -Prompt "`nPlease confirm the AdminUPN is correct: `'$AdminUPN`' (y/N)") -eq 'y')
 
-# Check if the standard user is logged on before proceeding
-<# quser.exe 2>&1 | Select-Object -Skip 1 | ForEach-Object {
-    $CurrentLine = $_.Trim() -replace '\s+|>',' ' -replace '>','' -Split '\s'
-    if ($UserAccount -match $CurrentLine[0]) {
-        Write-Host "`n"
-        Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
-        exit
-    }
-} #> # What was I thinking?!
-
-<# if ($UserAccount -eq ((Get-CimInstance -ClassName Win32_ComputerSystem).UserName -replace '^.*\\')) {
-    Write-Host "`n"
-    Write-Warning "There appears to be an active user session for `'$UserAccount`' - please log it off and restart the script"
-    exit
-}
-#>
 # Create the Modules directory
 if (!(Test-Path -Path "$SetDevPath\Modules")) {
     Write-Host -ForegroundColor 'Cyan' "`nCreating: $SetDevPath\Modules"
@@ -170,12 +154,12 @@ if (Test-Path -Path $SharedProfilePath -PathType Leaf) {
 
 $SharedProfileURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/Shared-PowerShell_Profile.ps1'
 $WebClient.DownloadFile($SharedProfileURL,$SharedProfilePath)
-$ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_GeneralFunctions.ps1'
-$WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_GeneralFunctions.ps1")
-$ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_NetworkFunctions.ps1'
-$WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_NetworkFunctions.ps1")
-$ProfileFunctionURL = 'https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_O365Functions.ps1'
-$WebClient.DownloadFile($ProfileFunctionURL,"$ProfilePath\PSProfile_O365Functions.ps1")
+
+'General','Network','O365' | ForEach-Object {
+    $ProfileFunctionURL = "https://raw.githubusercontent.com/DTMaguire/PowerShell/master/Profile/PSProfile_" + $_ + "Functions.ps1"
+    $PSFunctionFile = "$ProfilePath\PSProfile_" + $_ + "Functions.ps1"
+    $WebClient.DownloadFile($ProfileFunctionURL,$PSFunctionFile)
+}
 
 # Track down the 'Documents' folder location via the registry as it might have moved to somewhere like OneDrive
 $SIDs = (Get-ChildItem -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList').Name.Replace('HKEY_LOCAL_MACHINE','HKLM:')
@@ -203,10 +187,15 @@ try {
         # This doesn't do anything for absolute paths since there is no match and the exection continues 
         $UserDocuments = ((Get-ItemPropertyValue $ShellFolders -Name 'Personal').Replace("$Env:UserProfile","$UserProfileImagePath"))
         $UserDesktop = ((Get-ItemPropertyValue $ShellFolders -Name 'Desktop').Replace("$Env:UserProfile","$UserProfileImagePath"))
-        $Identity = (Get-ItemProperty ($HKUser + '\Software\Microsoft\Office\16.0\Common\Identity')).ADUserName
-
-        Add-Content -Path $SharedProfilePath -Value '$Identity = ' -NoNewline
-        Add-Content -Path $SharedProfilePath -Value "`'$Identity`'"
+        
+        try {
+            $Identity = (Get-ItemProperty ($HKUser + '\Software\Microsoft\Office\16.0\Common\Identity')).ADUserName
+            Add-Content -Path $SharedProfilePath -Value '$Identity = ' -NoNewline
+            Add-Content -Path $SharedProfilePath -Value "`'$Identity`'"
+        }
+        catch {
+            Write-Warning -Message "Unable to write Identity variable - skipping"
+        }
 
     }
     else {
@@ -216,7 +205,7 @@ try {
 }
 catch {
     Write-Error -Message "Unable to set one or more user variables: $($_)"
-    Write-Warning -Message "Please make sure a copy of `'Microsoft.PowerShell_profile.ps1`' file is in the standard user's Documents\PowerShell directories."
+    Write-Warning -Message "Please make sure a copy of `'Microsoft.PowerShell_profile.ps1`' file is in the standard user's Documents\PowerShell directories"
     # $UserDocuments = $null
     if (!(Test-Path $UserDesktop)) {
         $UserDesktop = $SetDevPath   
@@ -249,7 +238,7 @@ foreach ($Destination in $ProfileDestinations) {
     }
 }
 
-Write-Host "`nFinished copying common profile files."
+Write-Host "`nFinished copying common profile files"
 
 function Set-SecurityProtocols() {
     Write-Host -ForegroundColor 'White' "`nSecurity protocol issue, updating settings"
