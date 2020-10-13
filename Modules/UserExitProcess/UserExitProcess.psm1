@@ -64,22 +64,7 @@ function DeprovisionO365Teams {
     param (
         $Identity
     )
-    $TeamsProps =       'DisplayName',
-				        'UserPrincipalName',
-				        'LineURI',
-				        'OnPremLineURI',
-				        'OnPremLineURIManuallySet',
-				        'EnabledForRichPresence',
-				        'EnterpriseVoiceEnabled',
-				        'VoicePolicy',
-				        'OnlineVoiceRoutingPolicy',
-				        'DialPlan',
-				        'TenantDialPlan',
-				        'HostedVoiceMail',
-				        'HostedVoicemailPolicy',
-				        'ConferencingPolicy',
-				        'MobilityPolicy',
-                        'OnlineDialinConferencingPolicy'
+    $TeamsProps = 'UserPrincipalName','OnPremLineURI','TenantDialPlan','OnlineVoiceRoutingPolicy'
     
     $MsolUser = (Get-MsolUser -UserPrincipalName $Identity -ErrorAction SilentlyContinue)
     $TeamsUser = (Get-CsOnlineUser -Identity $Identity -ErrorAction SilentlyContinue | Select-Object $TeamsProps)
@@ -157,11 +142,19 @@ function Get-ADExchangeInfo {
     )
 
     if ($Exact) {
-        Get-ADUser -Identity $Name -Properties $Properties | Select-Object $Properties
+        $Match = Get-ADUser -Identity $Name -Properties $Properties | Select-Object $Properties
     }
     else {
-        Get-ADUser -Filter {Name -like $Name -or SamAccountName -like $Name} -Properties $Properties | Select-Object $Properties
+        $Match = Get-ADUser -Filter {Name -like $Name -or SamAccountName -like $Name} -Properties $Properties | Select-Object $Properties
     }
+
+    # Trick to remove any carriage returns from the 'Info' field before returning the object
+    foreach ($UserObject in $Match) {
+        if (!([string]::IsNullOrEmpty($UserObject.Info))) {
+            $UserObject.Info = ($UserObject.Info).Trim() -replace '\r\n',' --> '
+        }
+    }
+    return $Match
 }
 
 function ProcessMailbox ($Account) {
@@ -226,24 +219,16 @@ function ProcessExit ($Account) {
     Write-Host -ForegroundColor 'Cyan' "`nUser: $($Account.Name)"
     Start-Sleep 1
 
-    if ($Account.Description -match "Exit Processed") {
-        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed, skipping..."
-        continue
-    }
-
     DeprovisionO365Teams $Account.UserPrincipalName
-
-    $AccountDescription = $Account.Description + " -- Exit Processed: " + (Get-Date).ToShortDateString()
-    $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
 
     $AccountSAM = $Account.SamAccountName
     $Groups = @($Account | Select-Object -ExpandProperty Memberof | Get-ADGroup | Sort-Object | Select-Object -ExpandProperty SamAccountName)
     
-    if ($null -eq $Groups) {
-        Write-Host -ForegroundColor 'Magenta' "`nNo group memberships found!"
+    if ($Groups) {
+        RemoveFromGroups $AccountSAM $Groups
     }
     else {
-        RemoveFromGroups $AccountSAM $Groups
+        Write-Host -ForegroundColor 'Magenta' "`nNo group memberships found!"
     }
 
     if ($Account.Enabled -eq $true) {
@@ -255,6 +240,15 @@ function ProcessExit ($Account) {
     }
 
     ProcessMailbox $Account
+
+    if ($Account.Description -match "Exit Processed") {
+        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed, continuing..."
+        continue
+    }
+
+    $AccountDescription = $Account.Description + " -- Exit Processed: " + (Get-Date).ToShortDateString()
+    $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
+
     Set-ADUser -Identity $AccountSAM -Description $AccountDescription -Replace @{info="$ProcessInfo`r`n$($Account.info)"} -WhatIf:$WhatIf
 }
 
