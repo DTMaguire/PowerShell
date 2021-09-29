@@ -1,5 +1,5 @@
 # PowerShell script to export groups for a list of old users, remove them from the groups and disable their accounts
-# Version 3.4 - Copyright DM Tech 2019-2020
+# Version 4.0 - Copyright DM Tech 2019-2020
 #
 # This script will process user exits by running the following procedure on matched AD accounts:
 # - Export a list of group memberships to a text file
@@ -17,8 +17,44 @@
 using namespace System.Collections.Generic
 $AccountsArray = [List[PSObject]]::new()
 $NotMatched = [List[PSObject]]::new()
-$ExchSessionCreated = $false
-$O365SessionCreated = $false
+
+function GetADExchangeInfo {
+    param (
+        [Parameter(Mandatory,ValueFromPipeline,Position=0)]
+        [Alias("Identity")]
+        [String]$Name,
+
+        [Parameter()]
+        [string[]]
+        $Properties = @('Name','SamAccountName','UserPrincipalName','Memberof','Enabled','Description','Info','msExchRemoteRecipientType'),
+
+        [Parameter()]
+        [switch]$Exact
+    )
+
+    if ($Exact) {
+        try {
+            $Match = (Get-ADUser -Identity $Name -Properties $Properties -ErrorAction SilentlyContinue | Select-Object $Properties)
+        }
+        catch {
+            return $null
+        }
+    }
+    else {
+        $Match = (Get-ADUser -Filter {DisplayName -like $Name -or Name -like $Name -or SamAccountName -like $Name} -Properties $Properties | Select-Object $Properties)
+    }
+
+    if ($Match) {
+        # Trick to remove any carriage returns from the 'Info' field before returning the object
+        foreach ($UserObject in $Match) {
+            if (!([string]::IsNullOrEmpty($UserObject.Info))) {
+                $UserObject.Info = ($UserObject.Info).Trim() -replace '\r\n',' --> '
+            }
+        }
+    }
+
+    return $Match
+}
 
 function SetUserLicenses {
     param (
@@ -35,7 +71,7 @@ function SetUserLicenses {
                         'SHAREPOINTWAC',
                         'INTUNE_O365',
                         'STREAM_O365_E1',
-                        'Deskless',
+                        'DESKLESS',
                         'MICROSOFT_SEARCH',
                         'PROJECTWORKMANAGEMENT',
                         'FORMS_PLAN_E1',
@@ -65,23 +101,16 @@ function DeprovisionO365Teams {
         $Identity
     )
     $TeamsProps = 'UserPrincipalName','OnPremLineURI','TenantDialPlan','OnlineVoiceRoutingPolicy'
-    
     $MsolUser = (Get-MsolUser -UserPrincipalName $Identity -ErrorAction SilentlyContinue)
     $TeamsUser = (Get-CsOnlineUser -Identity $Identity -ErrorAction SilentlyContinue | Select-Object $TeamsProps)
 
     if ($MsolUser) {
-
+                 
+        # A Teams/Phone System license is required to remove the Policies and OnPremLineURI attribute!
         if ($TeamsUser) {
 
-            WriteLine Cyan
+            Write-Host "`nClearing Teams attributes..." -ForegroundColor White
 
-            Write-Host "`nTeams attributes:" -ForegroundColor White
-            Format-List -InputObject $TeamsUser 
-            # A Teams/Phone System license is required to remove the Policies and OnPremLineURI attribute!
-            Write-Host "Assigned licenses:`n" -ForegroundColor White
-            Format-List -InputObject $MsolUser.Licenses.AccountSkuID
-            Start-Sleep 1
-            
             if ($TeamsUser.OnPremLineURI) {
                 SetUserLicenses $Identity
                 Write-Host "`nReturning phone number to pool: $($TeamsUser.OnPremLineURI.split(':')[1])`n" -ForegroundColor Green
@@ -97,7 +126,7 @@ function DeprovisionO365Teams {
             }
         }
         else {
-            Write-Host "`nNo Teams attributes found for: $Identity"
+            Write-Host "`nNo Teams account found for: $Identity" -ForegroundColor Magenta
         }
 
         $DirectlyAssigned =  ($MsolUser.Licenses | Where-Object {!($_.GroupsAssigningLicense)}).AccountSkuID
@@ -109,7 +138,6 @@ function DeprovisionO365Teams {
 
             if (!$WhatIf) {
                 $DirectlyAssigned | ForEach-Object {
-                    #Write-Host "Set-MsolUserLicense -UserPrincipalName $Identity -RemoveLicenses $_"
                     Set-MsolUserLicense -UserPrincipalName $Identity -RemoveLicenses $_
                     # No -WhatIf option exists for this cmdlet!
                 }   
@@ -118,43 +146,8 @@ function DeprovisionO365Teams {
     }
     else {
         Write-Host "No matching Azure AD account found!" -ForegroundColor Magenta
-        <# 
-        Write-Host "No matching Azure AD account found, other possible account names:"
-        Get-MsolUser -SearchString "$(($Account.SamAccountName).split('.')[1])" #>
     }
-    WriteLine Cyan -End
     Start-Sleep 1
-}
-
-function Get-ADExchangeInfo {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory,ValueFromPipeline,Position=0)]
-        [Alias("Identity")]
-        [String]$Name,
-
-        [Parameter()]
-        [string[]]
-        $Properties = @('Name','SamAccountName','UserPrincipalName','Memberof','Enabled','Description','Info','msExchRemoteRecipientType'),
-
-        [Parameter()]
-        [switch]$Exact
-    )
-
-    if ($Exact) {
-        $Match = Get-ADUser -Identity $Name -Properties $Properties | Select-Object $Properties
-    }
-    else {
-        $Match = Get-ADUser -Filter {Name -like $Name -or SamAccountName -like $Name} -Properties $Properties | Select-Object $Properties
-    }
-
-    # Trick to remove any carriage returns from the 'Info' field before returning the object
-    foreach ($UserObject in $Match) {
-        if (!([string]::IsNullOrEmpty($UserObject.Info))) {
-            $UserObject.Info = ($UserObject.Info).Trim() -replace '\r\n',' --> '
-        }
-    }
-    return $Match
 }
 
 function ProcessMailbox ($Account) {
@@ -166,11 +159,18 @@ function ProcessMailbox ($Account) {
         Set-RemoteMailbox -Identity $AccountUPN -HiddenFromAddressListsEnabled $true -WhatIf:$WhatIf
             # Uncomment this to prevent email delivery: -AcceptMessagesOnlyFrom $AccountUPN
         
-        Write-Host -ForegroundColor 'White' "`nCancelling future calendar meetings..."
-        Invoke-Command -Session $O365Session -ScriptBlock {Remove-CalendarEvents -Identity $Using:AccountUPN -CancelOrganizedMeetings -QueryWindowInDays 730 -Confirm:$false -WhatIf:$Using:WhatIf}
+        if (Get-Mailbox -Identity $AccountUPN -ErrorAction SilentlyContinue) {
 
-        Write-Host -ForegroundColor 'White' "`nSetting mailbox `'$($Account.UserPrincipalName)`' to shared..."
-        Invoke-Command -Session $O365Session -ScriptBlock {Set-Mailbox -Identity $Using:AccountUPN -Type Shared -WhatIf:$Using:WhatIf}
+            Write-Host -ForegroundColor 'White' "`nCancelling future calendar meetings..."
+            #Invoke-Command -Session $O365Session -ScriptBlock {
+                Remove-CalendarEvents -Identity $AccountUPN -CancelOrganizedMeetings -QueryWindowInDays 730 -Confirm:$false -WhatIf:$WhatIf
+            #}
+    
+            Write-Host -ForegroundColor 'White' "`nSetting mailbox `'$($Account.UserPrincipalName)`' to shared..."
+            #Invoke-Command -Session $O365Session -ScriptBlock {
+                Set-Mailbox -Identity $AccountUPN -Type Shared -WhatIf:$WhatIf
+            #}
+        }
 
         if ($Account.msExchRemoteRecipientType -eq 1) {
             Write-Host -ForegroundColor 'White' "`nUpdating local AD recipient type value from `'1`' to `'97`'"
@@ -219,6 +219,11 @@ function ProcessExit ($Account) {
     Write-Host -ForegroundColor 'Cyan' "`nUser: $($Account.Name)"
     Start-Sleep 1
 
+    if ($Account.Description -match "Exit Processed") {
+        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed, continuing..."
+        continue
+    }
+    
     DeprovisionO365Teams $Account.UserPrincipalName
 
     $AccountSAM = $Account.SamAccountName
@@ -241,15 +246,26 @@ function ProcessExit ($Account) {
 
     ProcessMailbox $Account
 
-    if ($Account.Description -match "Exit Processed") {
-        Write-Host -ForegroundColor 'Magenta' "`nAccount exit already processed, continuing..."
-        continue
-    }
-
     $AccountDescription = $Account.Description + " -- Exit Processed: " + (Get-Date).ToShortDateString()
     $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
 
     Set-ADUser -Identity $AccountSAM -Description $AccountDescription -Replace @{info="$ProcessInfo`r`n$($Account.info)"} -WhatIf:$WhatIf
+}
+
+function EndUserExitProcess {
+
+    if ($ExchangeSession) {Disconnect-ExchangeSession}
+    if (Get-ExchangeOnline) {Disconnect-ExchangeOnline -Confirm:$false}
+    if ($MicrosoftTeams) {Disconnect-MicrosoftTeams -Confirm:$false}
+    
+    if (!($NoLog)) {
+        Stop-Transcript
+    }
+
+    $AccountsArray.Clear()
+    $NotMatched.Clear()
+
+    Write-Host -ForegroundColor 'White' "`nEnd of processing"
 }
 
 function Start-UserExitProcess {
@@ -261,25 +277,19 @@ function Start-UserExitProcess {
 
         [Parameter(Position=1)]
         [ValidateScript({
-            if (Test-Connection -ComputerName $_ -Quiet -Count 1) {
-                $true
-            } else {
-                throw "Unable to contact on-premise Exchange Server: $($_)"
-            }
-        })]
-        [string]$Exchange = "sydawsexchange",
-
-        [Parameter(Position=2)]
-        [ValidateScript({
             if (Test-Path -Path $_) {
                 $true
-            } else {
+            }
+            else {
                 throw "Unable to access: $($_)"
             }                
         })]
         [Alias("OutputDir")]
         [string]$OutputDirectory = "\\NetApp-Prod\Groups\Corp_Services\ICT\ICT Operations\User Offboarding",
         
+        [Parameter(ValueFromPipeline,Position=2)]
+        [pscredential]$Credential = $AdminCredential,
+
         [Parameter()]
         [Switch]$Exact = $false,
 
@@ -289,40 +299,6 @@ function Start-UserExitProcess {
         [Parameter()]
         [Switch]$WhatIf = $($WhatIfPreference)
     )
-
-    function EndUserExitProcess {
-
-        if ($ExchSessionCreated -eq $true) {
-            Write-Host -ForegroundColor 'White' "`nClosing on-premise Exchange session..."
-            Get-PSSession | Where-Object {$_.ComputerName -eq $ExchangeFQDN} | Remove-PSSession
-        }
-        if ($O365SessionCreated -eq $true) {
-            Write-Host -ForegroundColor 'White' "`nClosing Office 365 Exchange Online session..."
-            Get-PSSession | Where-Object {$_.ComputerName -eq 'outlook.office365.com'} | Remove-PSSession
-            # Disconnect-ExchangeOnline
-        }
-
-        Write-Host -ForegroundColor 'White' "`nClosing Skype for Business Online session..."
-        Get-PSSession | Where-Object {$_.ComputerName -like "*lync.com"} | Remove-PSSession
-
-        Write-Host -ForegroundColor 'White' "`nEnd of processing`n"
-        
-        if ($NoLog -eq $false) {
-            Stop-Transcript
-        }
-
-        $AccountsArray.Clear()
-        $NotMatched.Clear()
-        break
-    }
-
-    try {
-        $ExchangeFQDN = [System.Net.Dns]::GetHostEntry($Exchange).HostName
-    }
-    catch {
-        "Unable to resolve name of on-premise Exchange Server: $($_)"
-        break
-    }
 
     $LogTime = Get-Date -UFormat %y%m%d%H%M%S
     $LogPath = Join-Path -Path $OutputDirectory -ChildPath 'Logs'
@@ -338,31 +314,35 @@ function Start-UserExitProcess {
     foreach ($Name in $Identity) {
 
         if ($Exact) {
-            $ExactMatch = Get-ADExchangeInfo -Identity $Name -Exact
-            $AccountsArray.Add($ExactMatch)
-        }
-        else {
-            $AccountLookup = (Get-ADExchangeInfo $Name)
 
-            if ($null -ne $AccountLookup) {
-                # Foreach loop to deal with multiple return values
-                foreach ($UserObject in $AccountLookup) {
-                    # Do another lookup to include related Admin and Comms accounts
-                    $AdminLookup = Get-ADExchangeInfo -Name *$(${UserObject}.SamAccountName)
-
-                    foreach ($AdminObject in $AdminLookup) {
-                        # If array is empty or does not contain the user object, add it
-                        if ($AccountsArray.Count -lt 1) {
-                            $AccountsArray.Add($AdminObject)
-                        }
-                        elseif (!($AccountsArray.SamAccountName.Contains($AdminObject.SamAccountName))) {
-                            $AccountsArray.Add($AdminObject)
-                        }
-                    }
-                }
+            $ExactMatch = GetADExchangeInfo -Identity $Name -Exact
+            if ($ExactMatch) {
+                $AccountsArray.Add($ExactMatch)
             }
             else {
                 # If the name is not found, record it and notify 
+                $NotMatched.Add($Name)
+            }
+        }
+        else {
+            $AccountLookup = GetADExchangeInfo -Name "*$Name*"
+
+            if ($AccountLookup) {
+                # Warn about off-boarding the other matched accounts!
+                if ($AccountLookup.Count -gt 1) {
+                    Write-Warning "More than one account matched found for `'$Name`' - check output before proceeding!"
+                    Start-Sleep 1
+                }
+                 # Foreach loop to deal with multiple return values, but will run once with only one value
+                foreach ($UserObject in $AccountLookup) {
+                    # If array is empty or does not contain the user object, add it
+                    if (!($AccountsArray.Count) -or !($AccountsArray.Find({$args.SamAccountName -eq $UserObject.SamAccountName}))) {
+                        $AccountsArray.Add($UserObject)
+                    }
+                } 
+            }
+            else {
+                # If the name is not found, record it to display later
                 $NotMatched.Add($Name)
             }
         }
@@ -371,7 +351,7 @@ function Start-UserExitProcess {
     if ($AccountsArray.Count -gt 0) {
 
         Write-Host -ForegroundColor 'White' "`nAccount name matches found:"
-        $AccountsArray | Format-Table -Property Name, SamAccountName, UserPrincipalName, Enabled, Description
+        $AccountsArray | Format-Table -Property Name,SamAccountName,UserPrincipalName,Enabled,Description
 
         Write-Host -ForegroundColor 'Green' "Total accounts matched:" $AccountsArray.Count
 
@@ -386,74 +366,32 @@ function Start-UserExitProcess {
 
         if ((Read-Host -Prompt "`n`nRun exit process for these accounts (y/N)?") -eq 'y') {
 
-            if (Get-PSSession | Where-Object {$_.ComputerName -eq $ExchangeFQDN -and $_.State -eq 'Opened'}) {
-                Write-Host -ForegroundColor 'White' "`nDetected active on-premise Exchange session..."
-            }
-            else {
-                Write-Host -ForegroundColor 'White' "`nOn-premise Exchange session starting..."
-                try {
-                    Import-PSSession (New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$ExchangeFQDN/powershell/") -AllowClobber -CommandName "*RemoteMailbox" | Out-Null
-                    $Script:ExchSessionCreated = $true
-                }
-                catch {
-                    "Unable to establish session to on-premise Exchange Server: $($_)"
-                    EndUserExitProcess
-                }
-            }
+            Write-Host -ForegroundColor 'White' "`nConnecting to online services..."
 
-            if (Get-PSSession | Where-Object {$_.ComputerName -eq 'outlook.office365.com' -and $_.State -eq 'Opened'}) {
-                Write-Host -ForegroundColor 'White' "Detected active Office 365 Exchange Online session..."
-                $Script:O365Session = (Get-PSSession | Where-Object {$_.ComputerName -eq 'outlook.office365.com' -and $_.State -eq 'Opened'} | Select-Object -First 1)
+            if (!$Credential) {
+                $Credential = Get-Credential -Message "Enter admin UPN and password for Exchange and Office 365 services:"
             }
-            else {
-                # This is a check to see if the environment variable for specifying an admin username exists
-                # If so, call Functions-PSStoredCredentials.ps1 and attempt to grab the stored credentials
-                # If not, fall back to the standard annoying prompt
-                try {
-                    # The two lines below should be set in the PowerShell profile:
-                    #   $KeyPath = "$Home\Documents\WindowsPowerShell"
-                    #   . "$Env:DevPath\Profile\Functions-PSStoredCredentials.ps1"
-                    $O365Cred = (Get-StoredCredential -UserName $Env:AdminUPN)
-                }
-                catch {
-                    Write-Host -ForegroundColor 'Magenta' "Admin credentials required!"
-                    $O365Cred = (Get-Credential -Message "Enter Office 365 Admin Credentials")
-                }
+            try {
+                $Script:ExchangeSession = Connect-ExchangeSession -CommandName "*RemoteMailbox" -Credential $Credential
+                Connect-ExchangeOnline -ShowBanner:$false -Credential $Credential -CommandName "*Mailbox","*Calendar*"
+                $Script:MicrosoftTeams = Connect-MicrosoftTeams -Credential $Credential #-CommandName "Get-Cs*","Grant-Cs*","Set-Cs*" 
+                Connect-MsolService -Credential $Credential
+            }
+            catch {
+                EndUserExitProcess
+                throw $($_)
+            }
             
-                Write-Host -ForegroundColor 'White' "`nOffice 365 Exchange Online session starting..."
-                try {
-                    $Script:O365Session = (New-PSSession -ConnectionUri https://outlook.office365.com/powershell-liveid/ -ConfigurationName Microsoft.Exchange -Credential $O365Cred -Authentication Basic -AllowRedirection)
-                    # $Script:O365Session = Connect-ExchangeOnline -Credential $O365Cred -ShowBanner $false
-                    $Script:O365SessionCreated = $true
-                }
-                catch {
-                    "Unable to establish session to Office 365: $($_)"
-                    EndUserExitProcess
-                }
-            }
-
-            function GetSfBSession {Get-PSSession | Where-Object {$_.ComputerName -like "*lync.com"}}
-            
-            GetSfBSession | Where-Object {$_.State -notlike "Opened"} | ForEach-Object {Remove-PSSession -Session $_ -Verbose}
-
-            if ((GetSfBSession).State -like "Opened") {
-                Write-Host -ForegroundColor 'White' "`nDetected active Skype for Business Online session..."
-            } else {
-                Write-Host -ForegroundColor 'White' "`nSkype for Business Online session starting..."
-                $SfbSession = New-CsOnlineSession -Credential $AdminCredential
-                Import-PSSession $SfbSession -AllowClobber | Out-Null
-            }
-            Connect-MsolService -Credential $O365Cred | Out-Null
-
             Start-Sleep 1
+
             foreach ($Account in $AccountsArray) {
                 ProcessExit $Account
             }
         }
 
-    } else {
+    }
+    else {
         Write-Host -ForegroundColor 'Magenta' "`nNo account name matches found!"
     }
-
     EndUserExitProcess
 }
