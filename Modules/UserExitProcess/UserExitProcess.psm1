@@ -1,5 +1,5 @@
 # PowerShell script to export groups for a list of old users, remove them from the groups and disable their accounts
-# Version 4.0 - Copyright DM Tech 2019-2020
+# Version 4.2 - Copyright DM Tech 2019-2022
 #
 # This script will process user exits by running the following procedure on matched AD accounts:
 # - Export a list of group memberships to a text file
@@ -9,14 +9,16 @@
 # - Cancel future calendar appointments where the mailbox owner is the organiser
 # - Optionally, prevent any further email delivery to the mailbox
 # - Hide user from the Outlook address book
-# - Remove Teams/Skype for Business attributes and release assigned phone number
+# - Remove Teams attributes and release assigned phone number
 # - Remove from any directly assigned Office 365 cloud groups
+# - Move account to a disabled users OU in AD
 # - Disable and mark the AD account with "Exit processed"
 # - Write transcript of actions to a log file
 
 using namespace System.Collections.Generic
 $AccountsArray = [List[PSObject]]::new()
 $NotMatched = [List[PSObject]]::new()
+$DisabledUsersOU = "OU=_Disabled,OU=Users,OU=LRS,DC=trs,DC=nsw"
 
 function GetADExchangeInfo {
     param (
@@ -100,21 +102,21 @@ function DeprovisionO365Teams {
     param (
         $Identity
     )
-    $TeamsProps = 'UserPrincipalName','OnPremLineURI','TenantDialPlan','OnlineVoiceRoutingPolicy'
+    $TeamsProps = 'UserPrincipalName','LineURI','TenantDialPlan','OnlineVoiceRoutingPolicy'
     $MsolUser = (Get-MsolUser -UserPrincipalName $Identity -ErrorAction SilentlyContinue)
     $TeamsUser = (Get-CsOnlineUser -Identity $Identity -ErrorAction SilentlyContinue | Select-Object $TeamsProps)
 
     if ($MsolUser) {
                  
-        # A Teams/Phone System license is required to remove the Policies and OnPremLineURI attribute!
-        if ($TeamsUser) {
+        # A Teams/Phone System license is required to remove the Policies and LineURI attribute!
+        if ($TeamsUser.LineURI) {
 
             Write-Host "`nClearing Teams attributes..." -ForegroundColor White
 
-            if ($TeamsUser.OnPremLineURI) {
+            if ($TeamsUser.LineURI) {
                 SetUserLicenses $Identity
-                Write-Host "`nReturning phone number to pool: $($TeamsUser.OnPremLineURI.split(':')[1])`n" -ForegroundColor Green
-                Set-CsUser -Identity $Identity -OnPremLineURI $null -EnterpriseVoiceEnabled $false -WhatIf:$WhatIf
+                Write-Host "`nReturning phone number to pool: $($TeamsUser.LineURI.split(':')[1])`n" -ForegroundColor Green
+                Set-CsUser -Identity $Identity -LineURI $null -EnterpriseVoiceEnabled $false -WhatIf:$WhatIf
             }
             if ($TeamsUser.OnlineVoiceRoutingPolicy) {
                 SetUserLicenses $Identity
@@ -250,6 +252,10 @@ function ProcessExit ($Account) {
     $ProcessInfo = ("Exit processed " + (Get-Date -Format G) + " by " + ($env:UserName) + ".")
 
     Set-ADUser -Identity $AccountSAM -Description $AccountDescription -Replace @{info="$ProcessInfo`r`n$($Account.info)"} -WhatIf:$WhatIf
+
+    if ((Read-Host -Prompt "`nMove account to $DisabledUsersOU (y/N)? Don't do this for service accounts!") -eq 'Y') {
+        Get-ADUser -Identity $AccountSAM | Move-ADObject -TargetPath $DisabledUsersOU -WhatIf:$WhatIf
+    }
 }
 
 function EndUserExitProcess {
@@ -372,10 +378,12 @@ function Start-UserExitProcess {
                 $Credential = Get-Credential -Message "Enter admin UPN and password for Exchange and Office 365 services:"
             }
             try {
+                Connect-MsolService -Credential $Credential
                 $Script:ExchangeSession = Connect-ExchangeSession -CommandName "*RemoteMailbox" -Credential $Credential
                 Connect-ExchangeOnline -ShowBanner:$false -Credential $Credential -CommandName "*Mailbox","*Calendar*"
+                # Should no longer need this line if it's defined in the .PSD file:
+                # Import-Module -Name MicrosoftTeams -DisableNameChecking 
                 $Script:MicrosoftTeams = Connect-MicrosoftTeams -Credential $Credential #-CommandName "Get-Cs*","Grant-Cs*","Set-Cs*" 
-                Connect-MsolService -Credential $Credential
             }
             catch {
                 EndUserExitProcess
