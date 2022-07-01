@@ -113,10 +113,10 @@ function DeprovisionO365Teams {
 
             Write-Host "`nClearing Teams attributes..." -ForegroundColor White
 
-            if ($TeamsUser.LineURI) {
+            if ($TeamsUser.LineURI -and !$WhatIf) {
                 SetUserLicenses $Identity
                 Write-Host "`nReturning phone number to pool: $($TeamsUser.LineURI.split(':')[1])`n" -ForegroundColor Green
-                Set-CsUser -Identity $Identity -LineURI $null -EnterpriseVoiceEnabled $false -WhatIf:$WhatIf
+                Set-CsUser -Identity $Identity -LineURI $null -EnterpriseVoiceEnabled $false
             }
             if ($TeamsUser.OnlineVoiceRoutingPolicy) {
                 SetUserLicenses $Identity
